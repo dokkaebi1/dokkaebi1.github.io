@@ -36,6 +36,17 @@
     hv.addEventListener("playing", function () { hv.classList.add("is-playing"); });
     var p = hv.play();
     if (p && p.catch) p.catch(function () {});
+    // 움직이는 배경을 멈출 수 있는 버튼
+    var pb = document.querySelector(".hero__pause");
+    if (pb) {
+      pb.hidden = false;
+      pb.addEventListener("click", function () {
+        var paused = pb.getAttribute("aria-pressed") === "true";
+        if (paused) { var q = hv.play(); if (q && q.catch) q.catch(function () {}); } else { hv.pause(); }
+        pb.setAttribute("aria-pressed", paused ? "false" : "true");
+        pb.textContent = paused ? "배경 영상 멈춤" : "배경 영상 재생";
+      });
+    }
   }
 
   // 스크롤 등장 효과
