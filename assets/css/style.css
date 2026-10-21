@@ -414,3 +414,5 @@ dialog.form-dialog .dlg-close { position: sticky; float: right; top: 8px; margin
 .policy dd { margin: 0; color: var(--text-soft); }
 @media (max-width: 640px) { .policy { grid-template-columns: 1fr; gap: 4px; } .policy dd { margin-bottom: 12px; } }
 .site-footer a { color: inherit; }
+.fab { transition: opacity .25s, transform .25s; }
+.fab.is-hidden { opacity: 0; transform: translateY(12px); pointer-events: none; }

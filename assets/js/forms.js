@@ -125,6 +125,17 @@
     render();
   });
 
+  // ── 문의 양식이 화면에 보이면 ‘문의하기’ 버튼 숨기기 ─────────
+  var fab = document.querySelector(".fab");
+  if (fab && "IntersectionObserver" in window) {
+    var seen = new Set();
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { e.isIntersecting ? seen.add(e.target) : seen.delete(e.target); });
+      fab.classList.toggle("is-hidden", seen.size > 0);
+    });
+    document.querySelectorAll("form.js-form").forEach(function (f) { if (!f.closest("dialog")) io.observe(f); });
+  }
+
   // ── 새 소식(관리자 페이지에서 올린 사진·영상) ─────────
   var news = document.getElementById("news");
   if (news) {
