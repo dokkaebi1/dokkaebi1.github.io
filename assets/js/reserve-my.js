@@ -112,7 +112,9 @@
     if (!S.token) return Promise.resolve();
     return U.api('rsvMine', { token: S.token }).then(function (r) {
       if (!r.ok) { if (r.code === 'auth') loginView('로그인 시간이 지났어요. 다시 넣어 주세요.'); return; }
-      var before = JSON.stringify(S.data && S.data.list), after = JSON.stringify(r.list);
+      // 예약 내용뿐 아니라 날짜·도착 시험 모드가 바뀌어도 다시 그림 (도착 버튼이 바로 눌리게)
+      var key = function (d) { return d ? JSON.stringify([d.list, d.today, !!d.arriveTest]) : ''; };
+      var before = key(S.data), after = key(r);
       if (S.data && before !== after) {
         var was = {}; S.data.list.forEach(function (x) { was[x.id] = x.status; });
         r.list.forEach(function (x) { if (was[x.id] && was[x.id] !== x.status && x.status === R.ST.OK) U.toast('예약이 확정되었어요!'); });
