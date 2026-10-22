@@ -482,6 +482,12 @@ dialog.form-dialog .dlg-close { position: sticky; float: right; top: 8px; margin
 .promo { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; background: rgba(21, 17, 15, .62); animation: promo-in .3s var(--ease); }
 .promo[hidden] { display: none; }
 .promo__card { position: relative; width: min(460px, 100%); max-height: calc(100dvh - 32px); overflow: auto; background: var(--ink); color: var(--on-ink); border: 1px solid rgba(232, 176, 74, .45); border-top: 5px solid var(--red); border-radius: 18px; padding: 28px 26px 0; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .7); outline: none; }
+.promo__card:has(.promo__poster) { width: min(760px, 100%); display: grid; grid-template-columns: 250px minmax(0, 1fr); column-gap: 26px; padding-left: 22px; }
+.promo__poster { grid-row: 1; align-self: start; margin-top: 2px; border-radius: 12px; overflow: hidden; }
+.promo__poster img { display: block; width: 100%; height: auto; }
+.promo__body { grid-row: 1; min-width: 0; }
+.promo__card:has(.promo__poster) .promo__foot { grid-column: 1 / -1; margin-left: -22px; margin-top: 4px; }
+@media (max-width: 700px) { .promo__card:has(.promo__poster) { display: block; padding-left: 26px; } .promo__poster { display: none; } .promo__card:has(.promo__poster) .promo__foot { margin-left: -26px; } }
 .promo__x { position: absolute; top: 10px; right: 12px; width: 40px; height: 40px; border: 0; background: none; color: var(--on-ink); font-size: 28px; line-height: 1; cursor: pointer; }
 .promo__tag { display: inline-block; background: var(--gold); color: var(--ink); font-weight: 800; font-size: 13px; letter-spacing: .08em; padding: 4px 11px; border-radius: 8px; }
 .promo__series { margin: 14px 0 2px; color: var(--gold); font-weight: 700; font-size: 15px; }
