@@ -477,3 +477,13 @@ dialog.form-dialog .dlg-close { position: sticky; float: right; top: 8px; margin
 .show-hero h1 { font-weight: 900; letter-spacing: -.03em; }
 .hero__lead, .show-hero__tagline { font-weight: 500; }
 .footer-brand__slogan { font-weight: 600; }
+
+/* 공연 좌석 예약 안내 (첫 화면 · 메뉴) — site_config.json 의 reserve_notice */
+.hero__notice { display: flex; width: fit-content; flex-wrap: wrap; align-items: center; gap: 8px 14px; max-width: 100%; margin: 0 0 22px; padding: 10px 12px 10px 10px; border-radius: 16px; background: rgba(21, 17, 15, .72); border: 1px solid rgba(232, 176, 74, .55); color: var(--on-ink); text-decoration: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: border-color .2s, transform .2s var(--ease); }
+.hero__notice:hover { border-color: var(--gold); transform: translateY(-2px); }
+.hero__notice[hidden] { display: none; }
+.hero__notice-tag { background: var(--gold); color: var(--ink); font-weight: 800; font-size: 13px; letter-spacing: .06em; padding: 4px 10px; border-radius: 8px; }
+.hero__notice-text { font-weight: 700; font-size: 15.5px; }
+.hero__notice b { color: var(--gold); font-size: 15.5px; white-space: nowrap; }
+.nav a.nav__reserve { opacity: 1; color: var(--gold); border-color: var(--gold); }
+@media (max-width: 820px) { .nav a.nav__reserve { border-color: rgba(255, 255, 255, .08); } }
