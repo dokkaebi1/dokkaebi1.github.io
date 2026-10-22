@@ -478,12 +478,30 @@ dialog.form-dialog .dlg-close { position: sticky; float: right; top: 8px; margin
 .hero__lead, .show-hero__tagline { font-weight: 500; }
 .footer-brand__slogan { font-weight: 600; }
 
-/* 공연 좌석 예약 안내 (첫 화면 · 메뉴) — site_config.json 의 reserve_notice */
-.hero__notice { display: flex; width: fit-content; flex-wrap: wrap; align-items: center; gap: 8px 14px; max-width: 100%; margin: 0 0 22px; padding: 10px 12px 10px 10px; border-radius: 16px; background: rgba(21, 17, 15, .72); border: 1px solid rgba(232, 176, 74, .55); color: var(--on-ink); text-decoration: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: border-color .2s, transform .2s var(--ease); }
-.hero__notice:hover { border-color: var(--gold); transform: translateY(-2px); }
-.hero__notice[hidden] { display: none; }
-.hero__notice-tag { background: var(--gold); color: var(--ink); font-weight: 800; font-size: 13px; letter-spacing: .06em; padding: 4px 10px; border-radius: 8px; }
-.hero__notice-text { font-weight: 700; font-size: 15.5px; }
-.hero__notice b { color: var(--gold); font-size: 15.5px; white-space: nowrap; }
+/* 공연 좌석 예약 배너창 (첫 화면) · 메뉴 '좌석 예약' — site_config.json 의 reserve_notice. 공연이 끝나면 함께 빠집니다 */
+.promo { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; background: rgba(21, 17, 15, .62); animation: promo-in .3s var(--ease); }
+.promo[hidden] { display: none; }
+.promo__card { position: relative; width: min(460px, 100%); max-height: calc(100dvh - 32px); overflow: auto; background: var(--ink); color: var(--on-ink); border: 1px solid rgba(232, 176, 74, .45); border-top: 5px solid var(--red); border-radius: 18px; padding: 28px 26px 0; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .7); outline: none; }
+.promo__x { position: absolute; top: 10px; right: 12px; width: 40px; height: 40px; border: 0; background: none; color: var(--on-ink); font-size: 28px; line-height: 1; cursor: pointer; }
+.promo__tag { display: inline-block; background: var(--gold); color: var(--ink); font-weight: 800; font-size: 13px; letter-spacing: .08em; padding: 4px 11px; border-radius: 8px; }
+.promo__series { margin: 14px 0 2px; color: var(--gold); font-weight: 700; font-size: 15px; }
+.promo h2 { margin: 0 0 14px; font-family: var(--display); font-weight: 900; font-size: clamp(34px, 8vw, 44px); line-height: 1.1; letter-spacing: -.02em; color: #fff; }
+.promo__facts { margin: 0; display: grid; gap: 6px; font-size: 15.5px; }
+.promo__facts div { display: grid; grid-template-columns: 3em 1fr; gap: 10px; }
+.promo__facts dt { color: var(--on-ink-soft); font-weight: 700; }
+.promo__facts dd { margin: 0; font-weight: 700; }
+.promo__go { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; margin: 20px 0 18px; padding-top: 18px; border-top: 1px solid rgba(255, 255, 255, .12); }
+.promo__qr { width: 132px; height: 132px; background: #fff; border-radius: 10px; padding: 6px; }
+.promo__go .btn { width: 100%; justify-content: center; }
+.promo__hint { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--on-ink-soft); }
+.promo__short { margin: 6px 0 0; font-size: 13.5px; color: var(--on-ink-soft); }
+.promo__short b { color: var(--gold); font-size: 15px; letter-spacing: .02em; }
+.promo__foot { display: flex; justify-content: space-between; margin: 0 -26px; border-top: 1px solid rgba(255, 255, 255, .12); }
+.promo__foot button { flex: 1; border: 0; background: none; color: var(--on-ink-soft); font: inherit; font-size: 14.5px; padding: 14px; cursor: pointer; }
+.promo__foot button + button { border-left: 1px solid rgba(255, 255, 255, .12); color: var(--on-ink); font-weight: 700; }
+.promo__foot button:hover { background: rgba(255, 255, 255, .06); }
+@keyframes promo-in { from { opacity: 0; } to { opacity: 1; } }
+@media (hover: none) and (pointer: coarse) { .promo__qr, .promo__hint { display: none; } .promo__go { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .promo { animation: none; } }
 .nav a.nav__reserve { opacity: 1; color: var(--gold); border-color: var(--gold); }
 @media (max-width: 820px) { .nav a.nav__reserve { border-color: rgba(255, 255, 255, .08); } }
