@@ -370,20 +370,30 @@ var RSV = (function () {
     env.cache.remove('rsvcode:' + key);
     return null;
   }
+  /* 이메일 또는 휴대전화 번호로 예약을 찾아, 예약에 적힌 이메일로 확인 번호를 보냄 */
   function guestForgot(req, env) {
-    var email = normEmail(req.email);
-    if (!emailOk(email)) return fail('invalid', '예약할 때 적은 이메일을 넣어 주세요.', { errors: { email: '이메일 주소를 확인해 주세요' } });
-    var has = readAll(env).some(function (x) { return x.email === email && x.pw && x.status !== ST.BLOCK; });
-    if (has) {
-      var bad = sendCode(env, 'g:' + email, email, '[' + EVENT.org + '] 좌석 예약 비밀번호 찾기 확인 번호', [
-        EVENT.series + ' 〈' + EVENT.title + '〉 좌석 예약의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.']);
-      if (bad) return bad;
-    }
-    // 예약이 없는 이메일인지 남이 알 수 없게 같은 답을 줌
-    return { ok: true, sentTo: maskEmail(email) };
+    var email = normEmail(req.email), digits = str(req.phone).replace(/\D/g, '');
+    var recs = readAll(env).filter(function (x) { return x.pw && x.status !== ST.BLOCK; }), hit = null;
+    if (email) {
+      if (!emailOk(email)) return fail('invalid', '이메일 주소를 확인해 주세요.', { errors: { email: '이메일 주소를 확인해 주세요' } });
+      hit = recs.filter(function (x) { return x.email === email; })[0];
+      if (!hit) return fail('none', '이 이메일로 신청한 예약이 없어요. 예약할 때 적은 이메일이 다를 수 있어요. 아래 ‘휴대전화 번호로 찾기’를 눌러 보세요.');
+    } else if (digits.length >= 9) {
+      var fk = 'rsvphfail:' + digits, fails = +(env.cache.get(fk) || 0);
+      if (fails >= 5) return fail('many', '여러 번 찾지 못했어요. ' + EVENT.phone + '로 연락 주세요.');
+      hit = recs.filter(function (x) { return x.phone.replace(/\D/g, '') === digits; })[0];
+      if (!hit) { env.cache.put(fk, String(fails + 1), 3600); return fail('none', '이 번호로 신청한 예약이 없어요. 번호를 확인하시거나 ' + EVENT.phone + '로 연락 주세요.'); }
+      email = hit.email;
+      env.cache.put('rsvcodeph:' + digits, email, 900);
+    } else return fail('invalid', '예약할 때 적은 이메일이나 휴대전화 번호를 넣어 주세요.');
+    var bad = sendCode(env, 'g:' + email, email, '[' + EVENT.org + '] 좌석 예약 비밀번호 찾기 확인 번호', [
+      EVENT.series + ' 〈' + EVENT.title + '〉 좌석 예약의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.']);
+    if (bad) return bad;
+    return { ok: true, sentTo: maskEmail(email), byPhone: !req.email };
   }
   function guestReset(req, env) {
     var email = normEmail(req.email), pw = str(req.password);
+    if (!email && req.phone) email = normEmail(env.cache.get('rsvcodeph:' + str(req.phone).replace(/\D/g, '')) || '');
     if (!emailOk(email)) return fail('invalid', '이메일 주소를 확인해 주세요.', { errors: { email: '이메일 주소를 확인해 주세요' } });
     if (pw.length < 4 || pw.length > 30) return fail('invalid', '새 비밀번호는 4~30자로 정해 주세요.', { errors: { password: '4~30자로 정해 주세요' } });
     var bad = checkCode(env, 'g:' + email, req.code);
@@ -574,6 +584,21 @@ var RSV = (function () {
   function adminMemo(req, env) {
     return adminUpdate(req, env, function (x) { x.memo = clean(req.memo, 500); return { ok: true, x: x }; });
   }
+  /* 예약자 정보 고치기 (이메일을 잘못 적은 경우 등) */
+  function adminEdit(req, env) {
+    var name = clean(req.name, 30), org = clean(req.org, 60), phone = clean(req.phone, 20), email = normEmail(req.email), errors = {};
+    var digits = phone.replace(/\D/g, '');
+    if (!name) errors.name = '예약자 성함을 적어 주세요';
+    if (phone && (!/^[\d\s()+-]+$/.test(phone) || digits.length < 9 || digits.length > 12)) errors.phone = '전화번호를 확인해 주세요';
+    if (email && !emailOk(email)) errors.email = '이메일 주소를 확인해 주세요';
+    if (Object.keys(errors).length) return fail('invalid', '입력한 내용을 확인해 주세요.', { errors: errors });
+    return adminUpdate(req, env, function (x) {
+      var was = x.email;
+      x.name = name; x.org = org; x.phone = phone; x.email = email;
+      if (was !== email) x.memo = clean((x.memo ? x.memo + '\n' : '') + env.now() + ' 이메일 고침: ' + (was || '없음') + ' → ' + (email || '없음'), 500);
+      return { ok: true, x: x };
+    });
+  }
   function adminPassword(req, env) {
     var pw = str(req.password);
     if (pw.length < 4 || pw.length > 30) return fail('invalid', '비밀번호는 4~30자로 정해 주세요.');
@@ -663,6 +688,7 @@ var RSV = (function () {
           case 'rsvAdminArrive': return adminArrive(req, env);
           case 'rsvAdminMemo': return adminMemo(req, env);
           case 'rsvAdminPassword': return adminPassword(req, env);
+          case 'rsvAdminEdit': return adminEdit(req, env);
           case 'rsvAdminRemove': return adminRemove(req, env);
           case 'rsvAdminBook': return adminBook(req, env);
           case 'rsvAdminSettings': return saveSettings(req, env);

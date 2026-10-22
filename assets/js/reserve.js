@@ -189,6 +189,7 @@
     e.preventDefault();
     if (S.busy) return;
     var f = form.elements, errs = {};
+    if (f.email.value.trim().toLowerCase() !== f.email2.value.trim().toLowerCase()) errs.email2 = '이메일이 서로 달라요. 다시 확인해 주세요';
     if (f.password.value !== f.password2.value) errs.password2 = '비밀번호가 서로 달라요';
     if (Object.keys(errs).length) { U.fieldErrors(form, errs); return; }
     var btn = U.$('[type=submit]', form);

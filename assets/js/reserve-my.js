@@ -48,11 +48,13 @@
   /* 비밀번호 찾기: ① 이메일 → 확인 번호 메일 ② 확인 번호 + 새 비밀번호 → 바로 들어감 */
   function forgotView(email) {
     root.innerHTML = '<div class="rv-card rv-login">'
-      + '<div><span class="rv-eyebrow">비밀번호 찾기</span><h2>새 비밀번호 정하기</h2><p class="rv-sub" style="margin:6px 0 0">예약할 때 적은 이메일로 6자리 확인 번호를 보내 드려요.</p></div>'
+      + '<div><span class="rv-eyebrow">비밀번호 찾기</span><h2>새 비밀번호 정하기</h2><p class="rv-sub" style="margin:6px 0 0">예약에 적힌 이메일로 6자리 확인 번호를 보내 드려요.</p></div>'
       + '<form data-step="1" novalidate style="display:grid;gap:14px">'
-      + '<label class="rv-fld"><span>이메일</span><input name="email" type="email" inputmode="email" autocomplete="email" required></label>'
+      + '<label class="rv-fld" data-by="email"><span>예약할 때 적은 이메일</span><input name="email" type="email" inputmode="email" autocomplete="email"></label>'
+      + '<label class="rv-fld" data-by="phone" hidden><span>예약할 때 적은 휴대전화 번호</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="010-1234-5678"></label>'
       + '<p class="rv-err" role="alert"></p>'
-      + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">확인 번호 받기</button></form>'
+      + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">확인 번호 받기</button>'
+      + '<button type="button" class="rv-link" data-switch>이메일이 기억나지 않으면 · 휴대전화 번호로 찾기</button></form>'
       + '<form data-step="2" novalidate style="display:grid;gap:14px" hidden>'
       + '<p class="waitbox" style="margin:0" data-sent></p>'
       + '<label class="rv-fld"><span>확인 번호 (6자리)</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label>'
@@ -69,14 +71,23 @@
     f1.elements.email.focus();
     U.$('[data-back]', root).addEventListener('click', function () { loginView('', f1.elements.email.value); });
     U.$('[data-again]', root).addEventListener('click', function () { f2.hidden = true; f1.hidden = false; f1.elements.email.focus(); });
+    var byPhone = false;
+    U.$('[data-switch]', root).addEventListener('click', function () {
+      byPhone = !byPhone;
+      U.$('[data-by="email"]', f1).hidden = byPhone; U.$('[data-by="phone"]', f1).hidden = !byPhone;
+      this.textContent = byPhone ? '이메일로 찾기' : '이메일이 기억나지 않으면 · 휴대전화 번호로 찾기';
+      U.$('.rv-err', f1).textContent = '';
+      (byPhone ? f1.elements.phone : f1.elements.email).focus();
+    });
     f1.addEventListener('submit', function (e) {
       e.preventDefault();
       var btn = U.$('button', f1); btn.disabled = true;
-      U.api('rsvForgot', { email: f1.elements.email.value }).then(function (r) {
+      U.api('rsvForgot', byPhone ? { phone: f1.elements.phone.value } : { email: f1.elements.email.value }).then(function (r) {
         btn.disabled = false;
         if (!r.ok) { U.fieldErrors(f1, r.errors); U.$('.rv-err', f1).textContent = r.message; return; }
         f1.hidden = true; f2.hidden = false;
-        U.$('[data-sent]', f2).textContent = r.sentTo + '으로 확인 번호를 보냈어요. 메일이 안 보이면 스팸함도 확인해 주세요. (이 이메일로 신청한 예약이 있을 때만 메일이 가요)';
+        U.$('[data-sent]', f2).textContent = '예약에 적힌 이메일 ' + r.sentTo + '으로 확인 번호를 보냈어요. 메일이 안 보이면 스팸함도 확인해 주세요.'
+          + (r.byPhone ? ' 이 주소가 내 이메일이 아니면 예약할 때 이메일을 잘못 적은 거예요. ' + R.EVENT.phone + '로 연락 주시면 고쳐 드려요.' : '');
         f2.elements.code.focus();
       });
     });
@@ -84,7 +95,7 @@
       e.preventDefault();
       if (f2.elements.password.value !== f2.elements.password2.value) { U.fieldErrors(f2, { password2: '새 비밀번호가 서로 달라요' }); return; }
       var btn = U.$('[type=submit]', f2); btn.disabled = true;
-      U.api('rsvReset', { email: f1.elements.email.value, code: f2.elements.code.value, password: f2.elements.password.value }).then(function (r) {
+      U.api('rsvReset', { email: byPhone ? '' : f1.elements.email.value, phone: byPhone ? f1.elements.phone.value : '', code: f2.elements.code.value, password: f2.elements.password.value }).then(function (r) {
         btn.disabled = false;
         if (!r.ok) { U.fieldErrors(f2, r.errors); U.$('.rv-err', f2).textContent = r.message; return; }
         U.toast('비밀번호를 바꿨어요. 다음부터 새 비밀번호로 들어오세요.');
