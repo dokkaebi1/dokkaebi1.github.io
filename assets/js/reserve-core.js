@@ -255,7 +255,7 @@ var RSV = (function () {
     return send(env, x.email, '[' + EVENT.org + '] 좌석 예약 안내 · ' + showLabel(x.show), [
       x.name + '님, 신청하신 좌석 예약을 이번에는 확정하지 못했습니다.', ''
     ].concat(ticketLines(x), reason ? ['', '안내: ' + reason] : [], [
-      '', '다른 좌석이나 회차로 다시 신청하실 수 있습니다.', siteUrl(env) + '/reserve/', '', '문의: ' + EVENT.phone
+      '', '다른 좌석이나 회차로 다시 신청하실 수 있습니다.', siteUrl(env) + '/reserve/seats.html', '', '문의: ' + EVENT.phone
     ]));
   }
   function logMail(x, what, err) { x.mailLog = clean((x.mailLog ? x.mailLog + '\n' : '') + what + (err ? ' ✗ ' + err : ' ✓'), 600); }
