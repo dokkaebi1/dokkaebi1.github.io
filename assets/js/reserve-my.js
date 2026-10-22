@@ -9,20 +9,24 @@
   function tokenGet() { try { return sessionStorage.getItem(KEY); } catch (e) { return S.token; } }
   function tokenSet(t) { S.token = t; try { if (t) sessionStorage.setItem(KEY, t); else sessionStorage.removeItem(KEY); } catch (e) {} }
 
-  function loginView(msg) {
+  function loginView(msg, email) {
     tokenSet(null); S.data = null;
     root.innerHTML = '<div class="rv-card rv-login">'
       + '<div><span class="rv-eyebrow">좌석 예약</span><h2>내 예약 확인 · 입장</h2><p class="rv-sub" style="margin:6px 0 0">예약할 때 적은 이메일과 비밀번호를 넣어 주세요.</p></div>'
       + '<form novalidate style="display:grid;gap:14px">'
       + '<label class="rv-fld"><span>이메일</span><input name="email" type="email" inputmode="email" autocomplete="email" required></label>'
       + '<label class="rv-fld"><span>비밀번호</span><input name="password" type="password" autocomplete="current-password" required></label>'
+      + '<label class="rv-show-pw"><input type="checkbox" data-showpw> 비밀번호 보이기</label>'
       + '<p class="rv-err" role="alert">' + esc(msg || '') + '</p>'
       + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">예약 확인하기</button>'
       + '</form>'
-      + '<p class="rv-sub" style="margin:0;font-size:15px">비밀번호를 잊으셨으면 <a href="tel:' + R.EVENT.phone.replace(/-/g, '') + '">' + R.EVENT.phone + '</a>로 연락 주세요. 아직 예약하지 않으셨다면 <a href="seats.html">좌석 예약</a>으로 가세요.</p>'
+      + '<button type="button" class="rv-link" data-forgot>비밀번호를 잊으셨나요? 비밀번호 찾기</button>'
+      + '<p class="rv-sub" style="margin:0;font-size:15px">아직 예약하지 않으셨다면 <a href="seats.html">좌석 예약</a>으로 가세요. 문의 <a href="tel:' + R.EVENT.phone.replace(/-/g, '') + '">' + R.EVENT.phone + '</a></p>'
       + '</div>';
     var form = U.$('form', root);
-    form.elements.email.focus();
+    if (email) form.elements.email.value = email;
+    (email ? form.elements.password : form.elements.email).focus();
+    U.$('[data-forgot]', root).addEventListener('click', function () { forgotView(form.elements.email.value); });
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var btn = U.$('button', form);
@@ -30,13 +34,68 @@
       U.api('rsvLogin', { email: form.elements.email.value, password: form.elements.password.value }).then(function (r) {
         btn.disabled = false;
         if (!r.ok) { U.$('.rv-err', form).textContent = r.message; return; }
-        tokenSet(r.token);
-        S.data = r;
-        render();
-        startPoll();
+        loggedIn(r);
       });
     });
   }
+  function loggedIn(r) {
+    tokenSet(r.token);
+    S.data = r;
+    render();
+    startPoll();
+  }
+
+  /* 비밀번호 찾기: ① 이메일 → 확인 번호 메일 ② 확인 번호 + 새 비밀번호 → 바로 들어감 */
+  function forgotView(email) {
+    root.innerHTML = '<div class="rv-card rv-login">'
+      + '<div><span class="rv-eyebrow">비밀번호 찾기</span><h2>새 비밀번호 정하기</h2><p class="rv-sub" style="margin:6px 0 0">예약할 때 적은 이메일로 6자리 확인 번호를 보내 드려요.</p></div>'
+      + '<form data-step="1" novalidate style="display:grid;gap:14px">'
+      + '<label class="rv-fld"><span>이메일</span><input name="email" type="email" inputmode="email" autocomplete="email" required></label>'
+      + '<p class="rv-err" role="alert"></p>'
+      + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">확인 번호 받기</button></form>'
+      + '<form data-step="2" novalidate style="display:grid;gap:14px" hidden>'
+      + '<p class="waitbox" style="margin:0" data-sent></p>'
+      + '<label class="rv-fld"><span>확인 번호 (6자리)</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label>'
+      + '<label class="rv-fld"><span>새 비밀번호</span><input name="password" type="password" autocomplete="new-password" maxlength="30" required><small class="help">4자 이상</small></label>'
+      + '<label class="rv-fld"><span>새 비밀번호 확인</span><input name="password2" type="password" autocomplete="new-password" maxlength="30" required></label>'
+      + '<label class="rv-show-pw"><input type="checkbox" data-showpw> 비밀번호 보이기</label>'
+      + '<p class="rv-err" role="alert"></p>'
+      + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">비밀번호 바꾸고 들어가기</button>'
+      + '<button type="button" class="rv-link" data-again>확인 번호 다시 받기</button></form>'
+      + '<button type="button" class="rv-link" data-back>← 로그인으로 돌아가기</button>'
+      + '</div>';
+    var f1 = U.$('form[data-step="1"]', root), f2 = U.$('form[data-step="2"]', root);
+    if (email) f1.elements.email.value = email;
+    f1.elements.email.focus();
+    U.$('[data-back]', root).addEventListener('click', function () { loginView('', f1.elements.email.value); });
+    U.$('[data-again]', root).addEventListener('click', function () { f2.hidden = true; f1.hidden = false; f1.elements.email.focus(); });
+    f1.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var btn = U.$('button', f1); btn.disabled = true;
+      U.api('rsvForgot', { email: f1.elements.email.value }).then(function (r) {
+        btn.disabled = false;
+        if (!r.ok) { U.fieldErrors(f1, r.errors); U.$('.rv-err', f1).textContent = r.message; return; }
+        f1.hidden = true; f2.hidden = false;
+        U.$('[data-sent]', f2).textContent = r.sentTo + '으로 확인 번호를 보냈어요. 메일이 안 보이면 스팸함도 확인해 주세요. (이 이메일로 신청한 예약이 있을 때만 메일이 가요)';
+        f2.elements.code.focus();
+      });
+    });
+    f2.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (f2.elements.password.value !== f2.elements.password2.value) { U.fieldErrors(f2, { password2: '새 비밀번호가 서로 달라요' }); return; }
+      var btn = U.$('[type=submit]', f2); btn.disabled = true;
+      U.api('rsvReset', { email: f1.elements.email.value, code: f2.elements.code.value, password: f2.elements.password.value }).then(function (r) {
+        btn.disabled = false;
+        if (!r.ok) { U.fieldErrors(f2, r.errors); U.$('.rv-err', f2).textContent = r.message; return; }
+        U.toast('비밀번호를 바꿨어요. 다음부터 새 비밀번호로 들어오세요.');
+        loggedIn(r);
+      });
+    });
+  }
+  root.addEventListener('change', function (e) {
+    if (!e.target.hasAttribute('data-showpw')) return;
+    e.target.closest('form').querySelectorAll('input[name^="password"]').forEach(function (i) { i.type = e.target.checked ? 'text' : 'password'; });
+  });
 
   function refresh() {
     if (!S.token) return Promise.resolve();

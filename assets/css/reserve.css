@@ -438,3 +438,10 @@ html { -webkit-text-size-adjust: 100%; }
 @keyframes rvWarn { 50% { opacity: .65; } }
 .rv-pick small { color: var(--on-ink-soft); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { .rv-timer.warn { animation: none; } }
+
+/* 비밀번호 보이기 */
+.rv-show-pw { display: inline-flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 600; color: var(--text-soft); cursor: pointer; width: fit-content; }
+.rv-show-pw input { width: 18px; height: 18px; accent-color: var(--red); margin: 0; }
+
+/* hidden 속성은 항상 숨김 (style 로 display 를 준 요소도) */
+.rv-body [hidden] { display: none !important; }

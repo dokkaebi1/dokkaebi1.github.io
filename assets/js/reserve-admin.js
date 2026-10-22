@@ -25,6 +25,14 @@
       + '<label class="rv-fld"><span>비밀번호</span><input name="password" type="password" autocomplete="current-password" required></label>'
       + '<p class="rv-err" role="alert">' + esc(msg || '') + '</p>'
       + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">들어가기</button></form>'
+      + '<button type="button" class="rv-link" data-adm-forgot>비밀번호를 잊으셨나요? 비밀번호 찾기</button>'
+      + '<form data-adm-reset novalidate style="display:grid;gap:14px" hidden>'
+      + '<p class="waitbox" style="margin:0" data-sent></p>'
+      + '<label class="rv-fld"><span>확인 번호 (6자리)</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label>'
+      + '<label class="rv-fld"><span>새 비밀번호</span><input name="password" type="password" autocomplete="new-password"></label>'
+      + '<label class="rv-fld"><span>새 비밀번호 확인</span><input name="password2" type="password" autocomplete="new-password"></label>'
+      + '<p class="rv-err" role="alert"></p>'
+      + '<button class="rv-btn rv-btn-ink rv-btn-wide" type="submit">비밀번호 바꾸고 들어가기</button></form>'
       + '<p class="rv-sub" style="margin:0;font-size:14px">한 번 들어오면 8시간 동안 쓸 수 있어요. 비밀번호를 5번 틀리면 15분 동안 잠겨요.</p>'
       + (ENTRY ? '<p class="rv-sub" style="margin:0;font-size:14px">극단 도깨비 구글 계정이 있으면 <a href="' + esc(ENTRY) + '">구글 로그인으로 들어가기</a></p>' : '')
       + '</div>';
@@ -328,6 +336,18 @@
 
   root.addEventListener('click', function (e) {
     var t = e.target.closest('button, a'); if (!t) return;
+    if (t.hasAttribute('data-adm-forgot')) {
+      t.disabled = true;
+      U.api('rsvAdminForgot', {}).then(function (r) {
+        t.disabled = false;
+        var f = U.$('form[data-adm-reset]', root), login = U.$('form[data-login]', root);
+        if (!r.ok) { U.$('.rv-err', login).textContent = r.message; return; }
+        login.hidden = true; t.hidden = true; f.hidden = false;
+        U.$('[data-sent]', f).textContent = '담당자 메일(' + r.sentTo + ')로 6자리 확인 번호를 보냈어요. 15분 안에 넣어 주세요.';
+        f.elements.code.focus();
+      });
+      return;
+    }
     if (t.dataset.tab) { S.tab = t.dataset.tab; render(); return; }
     if (t.dataset.show) { S.show = t.dataset.show; S.focus = null; S.pick = []; render(); return; }
     if (t.dataset.gate) { S.gate = t.dataset.gate; render(); return; }
@@ -362,6 +382,19 @@
         if (!r.ok) { U.$('.rv-err', f).textContent = r.message; f.elements.password.select(); return; }
         S.token = r.token;
         try { sessionStorage.setItem(KEY, r.token); } catch (x) {}
+        start();
+      });
+      return;
+    }
+    if (f.hasAttribute('data-adm-reset')) {
+      if (f.elements.password.value !== f.elements.password2.value) { U.fieldErrors(f, { password2: '새 비밀번호가 서로 달라요' }); return; }
+      btn.disabled = true;
+      U.api('rsvAdminReset', { code: f.elements.code.value, password: f.elements.password.value }).then(function (r) {
+        btn.disabled = false;
+        if (!r.ok) { U.fieldErrors(f, r.errors); U.$('.rv-err', f).textContent = r.message; return; }
+        S.token = r.token;
+        try { sessionStorage.setItem(KEY, r.token); } catch (x) {}
+        U.toast('비밀번호를 바꿨어요. 아이디는 ' + r.id + ' 그대로예요.');
         start();
       });
       return;

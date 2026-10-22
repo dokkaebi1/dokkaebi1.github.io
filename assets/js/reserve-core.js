@@ -335,11 +335,75 @@ var RSV = (function () {
     }).map(function (x) { return x.id; });
     if (!ids.length) {
       env.cache.put(fk, String(fails + 1), 900);
-      return fail('login', '이메일이나 비밀번호가 맞지 않아요.');
+      return fail('login', '이메일이나 비밀번호가 맞지 않아요. 비밀번호가 기억나지 않으면 ‘비밀번호 찾기’를 눌러 주세요.');
     }
+    return guestSession(env, email, ids);
+  }
+  function guestSession(env, email, ids) {
     var token = env.uuid() + env.uuid();
     env.cache.put('rtok:' + token, JSON.stringify({ email: email, ids: ids }), 21600);
     return listMine({ token: token }, env, token);
+  }
+
+  /* ---------- 비밀번호 찾기: 메일로 6자리 확인 번호(15분) → 새 비밀번호 ---------- */
+  function makeCode(env) { return ('000000' + (parseInt(env.uuid().slice(0, 8), 16) % 1000000)).slice(-6); }
+  function maskEmail(e) { var p = str(e).split('@'); return p.length < 2 ? '' : p[0].slice(0, 3) + '***@' + p[1]; }
+  function sendCode(env, key, to, subject, lines) {
+    var rk = 'rsvcodecnt:' + key, n = +(env.cache.get(rk) || 0);
+    if (n >= 3) return fail('many', '확인 번호를 너무 여러 번 요청했어요. 1시간 뒤 다시 해 주세요.');
+    var code = makeCode(env);
+    env.cache.put('rsvcode:' + key, JSON.stringify({ code: code, tries: 0 }), 900);
+    env.cache.put(rk, String(n + 1), 3600);
+    var err = send(env, to, subject, lines.concat(['', '확인 번호: ' + code, '', '15분 동안 쓸 수 있어요. 직접 요청하지 않았다면 이 메일은 무시해 주세요.', '문의: ' + EVENT.phone]));
+    return err ? fail('mail', '메일을 보내지 못했어요. ' + EVENT.phone + '로 연락 주세요.') : null;
+  }
+  function checkCode(env, key, code) {
+    var v = null;
+    try { v = JSON.parse(env.cache.get('rsvcode:' + key) || 'null'); } catch (e) { v = null; }
+    if (!v) return fail('code', '확인 번호가 없거나 15분이 지났어요. 확인 번호를 다시 받아 주세요.');
+    if (str(code).replace(/\D/g, '') !== v.code) {
+      v.tries++;
+      if (v.tries >= 5) { env.cache.remove('rsvcode:' + key); return fail('code', '확인 번호를 5번 틀렸어요. 확인 번호를 다시 받아 주세요.'); }
+      env.cache.put('rsvcode:' + key, JSON.stringify(v), 900);
+      return fail('code', '확인 번호가 맞지 않아요. 메일에 온 6자리 숫자를 넣어 주세요.', { errors: { code: '확인 번호가 맞지 않아요' } });
+    }
+    env.cache.remove('rsvcode:' + key);
+    return null;
+  }
+  function guestForgot(req, env) {
+    var email = normEmail(req.email);
+    if (!emailOk(email)) return fail('invalid', '예약할 때 적은 이메일을 넣어 주세요.', { errors: { email: '이메일 주소를 확인해 주세요' } });
+    var has = readAll(env).some(function (x) { return x.email === email && x.pw && x.status !== ST.BLOCK; });
+    if (has) {
+      var bad = sendCode(env, 'g:' + email, email, '[' + EVENT.org + '] 좌석 예약 비밀번호 찾기 확인 번호', [
+        EVENT.series + ' 〈' + EVENT.title + '〉 좌석 예약의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.']);
+      if (bad) return bad;
+    }
+    // 예약이 없는 이메일인지 남이 알 수 없게 같은 답을 줌
+    return { ok: true, sentTo: maskEmail(email) };
+  }
+  function guestReset(req, env) {
+    var email = normEmail(req.email), pw = str(req.password);
+    if (!emailOk(email)) return fail('invalid', '이메일 주소를 확인해 주세요.', { errors: { email: '이메일 주소를 확인해 주세요' } });
+    if (pw.length < 4 || pw.length > 30) return fail('invalid', '새 비밀번호는 4~30자로 정해 주세요.', { errors: { password: '4~30자로 정해 주세요' } });
+    var bad = checkCode(env, 'g:' + email, req.code);
+    if (bad) return bad;
+    var ids = [];
+    env.lock(function () {
+      var recs = readAll(env);
+      recs.forEach(function (x) {
+        if (x.email !== email || x.status === ST.BLOCK) return;
+        var salt = env.uuid().slice(0, 12);
+        x.pw = salt + '$' + env.sha256(salt + ':' + pw);
+        ids.push(x.id);
+      });
+      if (ids.length) writeAll(env, recs);
+    });
+    if (!ids.length) return fail('missing', '이 이메일로 신청한 예약을 찾지 못했어요.');
+    env.cache.remove('rsvfail:' + email);
+    var res = guestSession(env, email, ids);
+    res.reset = true;
+    return res;
   }
   function guest(req, env) {
     var t = str(req.token), v = t && env.cache.get('rtok:' + t);
@@ -408,6 +472,28 @@ var RSV = (function () {
     env.cache.put('rsvadm:' + token, '1', ADMIN_SEC);
     return { ok: true, token: token };
   }
+  /* 관리자 비밀번호 찾기: 확인 번호를 담당자 알림 메일로 보냄 */
+  function adminForgot(req, env) {
+    var to = notifyTo(env);
+    if (!to || !env.setAdminCred) return fail('off', '담당자 메일이 정해지지 않았어요. 구글 로그인으로 들어가 주세요.');
+    var bad = sendCode(env, 'admin', to, '[' + EVENT.org + '] 좌석 예약 관리 비밀번호 찾기 확인 번호', [
+      '좌석 예약 관리 화면의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.',
+      '아이디: ' + str((env.adminCred() || {}).id)]);
+    return bad || { ok: true, sentTo: maskEmail(to) };
+  }
+  function adminReset(req, env) {
+    var pw = str(req.password);
+    if (pw.length < 4 || pw.length > 60) return fail('invalid', '새 비밀번호는 4~60자로 정해 주세요.', { errors: { password: '4~60자로 정해 주세요' } });
+    var bad = checkCode(env, 'admin', req.code);
+    if (bad) return bad;
+    var c = env.adminCred() || {}, salt = env.uuid().slice(0, 16);
+    env.setAdminCred({ id: c.id || 'admin', salt: salt, hash: env.sha256(salt + ':' + pw) });
+    env.cache.remove('rsvadmfail');
+    var token = env.uuid() + env.uuid();
+    env.cache.put('rsvadm:' + token, '1', ADMIN_SEC);
+    return { ok: true, token: token, id: c.id };
+  }
+
   function adminSetCred(req, env) {
     if (!env.setAdminCred) return fail('off', '바꿀 수 없어요.');
     var id = clean(req.id, 40), pw = str(req.password), errors = {};
@@ -560,10 +646,14 @@ var RSV = (function () {
       if (a === 'rsvHold') return hold(req, env);
       if (a === 'rsvBook') return book(req, env);
       if (a === 'rsvLogin') return guestLogin(req, env);
+      if (a === 'rsvForgot') return guestForgot(req, env);
+      if (a === 'rsvReset') return guestReset(req, env);
       if (a === 'rsvMine') return listMine(req, env);
       if (a === 'rsvArrive') return arrive(req, env);
       if (a === 'rsvCancel') return guestCancel(req, env);
       if (a === 'rsvAdminLogin') return adminLogin(req, env);
+      if (a === 'rsvAdminForgot') return adminForgot(req, env);
+      if (a === 'rsvAdminReset') return adminReset(req, env);
       if (a.indexOf('rsvAdmin') === 0) {
         if (!isAdmin(req, env)) return fail('auth', '관리자 로그인이 필요해요.');
         switch (a) {

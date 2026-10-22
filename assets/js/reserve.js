@@ -177,6 +177,10 @@
     dlg.showModal();
     setTimeout(function () { form.elements.name.focus(); }, 30);
   }
+  form.addEventListener('change', function (e) {
+    if (!e.target.hasAttribute('data-showpw')) return;
+    form.querySelectorAll('input[name^="password"]').forEach(function (i) { i.type = e.target.checked ? 'text' : 'password'; });
+  });
   U.$('.x', dlg).addEventListener('click', function () { dlg.close(); });
   U.$('[data-close]', dlg).addEventListener('click', function () { dlg.close(); });
   U.$('[data-done]', dlg).addEventListener('click', function () { dlg.close(); });
@@ -200,6 +204,7 @@
         U.$('[data-what]', dlg).textContent = r.showLabel + ' · ' + r.seats.map(R.seatName).join(', ') + ' (' + r.seats.length + '석)';
         U.$('[data-mail]', dlg).textContent = f.email.value.trim();
         form.reset();
+        form.querySelectorAll('input[name^="password"]').forEach(function (i) { i.type = 'password'; });
         S.sel = [];
         S.t0 = Date.now();
         load();
