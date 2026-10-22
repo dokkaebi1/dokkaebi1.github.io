@@ -246,6 +246,7 @@
       }).join('') + '</div>'
       + '<div class="ad-gate-stats"><div><small>도착</small><b>' + st.arrN + '<span> / ' + st.okN + '건</span></b></div><div><small>도착 좌석</small><b>' + st.arr + '<span> / ' + st.ok + '석</span></b></div>'
       + '<div><small>아직 안 옴</small><b>' + (st.okN - st.arrN) + '<span>건</span></b></div><div class="bar"><i style="width:' + pct + '%"></i></div></div>'
+      + (S.data.settings.arriveTest ? '<p class="waitbox">도착 확인 시험 모드가 켜져 있어요 (' + esc(S.data.settings.arriveTestUntil) + '까지). 시험 도착은 아래 목록에서 ‘취소’로 되돌릴 수 있어요.</p>' : '')
       + (waits.length ? '<p class="waitbox">아직 승인 대기인 예약이 ' + waits.length + '건 있어요. <button type="button" class="rv-link" data-goto-wait>신청 관리에서 처리하기</button></p>' : '')
       + '<div class="ad-split gate"><div class="ad-gate-list">' + (list.length ? list.map(function (x) {
           return '<div class="ad-row' + (x.arrivedAt ? ' done' : '') + '" data-id="' + esc(x.id) + '"><div><b>' + esc(x.name) + '</b>' + (x.org ? ' <span>' + esc(x.org) + '</span>' : '')
@@ -270,6 +271,12 @@
       + '<label class="rv-consent" style="font-size:16px;color:var(--ink);font-weight:700;margin:0"><input type="checkbox" name="open"' + (s.open ? ' checked' : '') + '> 홈페이지에서 온라인 예약 받기</label>'
       + '<label class="rv-fld" style="max-width:260px"><span>한 번에 예약할 수 있는 최대 좌석 수</span><input name="max" type="number" min="1" max="242" value="' + s.max + '"></label>'
       + '<button class="rv-btn rv-btn-red rv-btn-sm" type="submit" style="justify-self:start">설정 저장</button></form></div>'
+      + '<div class="rv-card" style="max-width:640px;margin-top:16px;gap:10px"><b>도착 확인 시험 모드</b>'
+      + '<p class="rv-sub" style="margin:0;font-size:15px">켜면 2시간 동안 공연 날이 아니어도 손님 화면의 ‘공연장에 도착했어요’를 눌러 볼 수 있어요. 2시간 뒤 저절로 꺼져요. 확정된 예약에서만 눌러져요.</p>'
+      + (s.arriveTest ? '<p class="waitbox" style="margin:0">지금 켜져 있어요 · ' + esc(s.arriveTestUntil) + '에 꺼져요. 시험이 끝나면 ‘당일 입장’ 탭에서 ‘도착 취소’로 되돌려 주세요.</p>'
+        + '<button type="button" class="rv-btn rv-btn-line rv-btn-sm" style="justify-self:start" data-arrive-test="off">시험 모드 끄기</button>'
+        : '<button type="button" class="rv-btn rv-btn-ink rv-btn-sm" style="justify-self:start" data-arrive-test="on">2시간 동안 켜기</button>')
+      + '</div>'
       + '<div class="rv-card" style="max-width:640px;margin-top:16px"><form data-cred novalidate style="display:grid;gap:14px">'
       + '<b>관리 화면 아이디·비밀번호 바꾸기</b>'
       + '<label class="rv-fld" style="max-width:320px"><span>아이디</span><input name="id" value="' + esc(d.adminId || '') + '" autocomplete="username" autocapitalize="off" spellcheck="false"></label>'
@@ -373,6 +380,11 @@
         U.$('[data-sent]', f).textContent = '담당자 메일(' + r.sentTo + ')로 6자리 확인 번호를 보냈어요. 15분 안에 넣어 주세요.';
         f.elements.code.focus();
       });
+      return;
+    }
+    if (t.dataset.arriveTest) {
+      t.disabled = true;
+      call('rsvAdminSettings', { arriveTest: t.dataset.arriveTest === 'on' }).then(function (r) { after(r, r.settings && r.settings.arriveTest ? '도착 확인 시험 모드를 켰어요 (' + r.settings.arriveTestUntil + '까지).' : '도착 확인 시험 모드를 껐어요.'); });
       return;
     }
     if (t.dataset.tab) { S.tab = t.dataset.tab; render(); return; }

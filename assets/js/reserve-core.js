@@ -120,8 +120,13 @@ var RSV = (function () {
   /* ---------- 설정 (스크립트 속성) ---------- */
   function settings(env) {
     var max = parseInt(env.props.get('RSV_MAX'), 10);
-    return { open: env.props.get('RSV_OPEN') !== '0', max: isNaN(max) ? DEFAULT_MAX : Math.max(1, Math.min(242, max)) };
+    var testUntil = +(env.props.get('RSV_ARRIVE_TEST') || 0), test = testUntil > nowMs(env);
+    return { open: env.props.get('RSV_OPEN') !== '0', max: isNaN(max) ? DEFAULT_MAX : Math.max(1, Math.min(242, max)),
+      arriveTest: test, arriveTestUntil: test ? new Date(testUntil + 9 * 3600e3).toISOString().slice(11, 16) : '' };
   }
+  /* 도착 확인 시험 모드: 관리자가 켜면 2시간 동안 공연 전에도 '도착했어요'를 눌러 볼 수 있음 (저절로 꺼짐) */
+  var ARRIVE_TEST_MS = 2 * 3600 * 1000;
+  function canArrive(env, x) { return env.today() === x.show || (settings(env).arriveTest && env.today() < x.show); }
   function siteUrl(env) { return str(env.siteUrl || 'https://dokkaebi1.github.io').replace(/\/+$/, ''); }
   function notifyTo(env) { try { return env.notifyEmail ? str(env.notifyEmail()) : ''; } catch (e) { return ''; } }
   function adminLink(env) { try { return env.adminUrl ? str(env.adminUrl()) : siteUrl(env) + '/reserve/admin.html'; } catch (e) { return siteUrl(env) + '/reserve/admin.html'; } }
@@ -424,7 +429,7 @@ var RSV = (function () {
     var g = guest(req, env);
     if (!g) return fail('auth', '다시 로그인해 주세요.');
     var list = readAll(env).filter(function (x) { return g.ids.indexOf(x.id) >= 0 && x.email === g.email; }).map(mine);
-    var res = { ok: true, today: env.today(), now: env.now(), list: list, event: EVENT };
+    var res = { ok: true, today: env.today(), now: env.now(), list: list, event: EVENT, arriveTest: settings(env).arriveTest };
     if (token) res.token = token;
     return res;
   }
@@ -445,7 +450,7 @@ var RSV = (function () {
   function arrive(req, env) {
     return guestUpdate(req, env, function (x) {
       if (x.status !== ST.OK) return fail('status', x.status === ST.WAIT ? '아직 승인 대기 중인 예약이에요. 입구에서 직원에게 말씀해 주세요.' : '확정된 예약이 아니에요.');
-      if (env.today() !== x.show) return fail('day', '도착 확인은 공연 당일(' + dateLabel(x.show) + ')에 할 수 있어요.');
+      if (!canArrive(env, x)) return fail('day', '도착 확인은 공연 당일(' + dateLabel(x.show) + ')에 할 수 있어요.');
       if (!x.arrivedAt) x.arrivedAt = env.now();
       return { ok: true, x: x };
     });
@@ -657,6 +662,7 @@ var RSV = (function () {
       if (isNaN(n) || n < 1 || n > 242) return fail('invalid', '최대 좌석 수는 1~242 사이 숫자로 적어 주세요.');
       env.props.set('RSV_MAX', String(n));
     }
+    if (req.arriveTest !== undefined) env.props.set('RSV_ARRIVE_TEST', req.arriveTest ? String(nowMs(env) + ARRIVE_TEST_MS) : '0');
     bump(env);
     return { ok: true, settings: settings(env) };
   }

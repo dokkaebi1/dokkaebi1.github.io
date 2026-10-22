@@ -128,8 +128,9 @@
     if (x.status === R.ST.NO) return '<div class="mutebox">이번에는 예약이 확정되지 않았어요. 다른 좌석이나 회차로 <a href="seats.html">다시 신청</a>할 수 있어요.</div>';
     if (x.status === R.ST.CANCEL) return '<div class="mutebox">취소된 예약이에요.</div>';
     if (x.arrivedAt) return '<div class="arrived"><span class="ic">✓</span><b>도착 확인 완료</b><span>' + esc(x.arrivedAt.slice(11)) + ' 도착 · 입구 안내 직원에게 이 화면을 보여 주세요</span></div>';
-    if (today === x.show) return '<button type="button" class="rv-btn rv-btn-ok rv-btn-wide rv-btn-big" data-arrive="' + esc(x.id) + '">공연장에 도착했어요</button>'
-      + '<p class="rv-center">극장에 도착한 뒤에 눌러 주세요. 담당자 화면에 바로 표시돼요.</p>';
+    var test = S.data && S.data.arriveTest && today < x.show;
+    if (today === x.show || test) return '<button type="button" class="rv-btn rv-btn-ok rv-btn-wide rv-btn-big" data-arrive="' + esc(x.id) + '">공연장에 도착했어요</button>'
+      + '<p class="rv-center">' + (test ? '지금은 <b>도착 확인 시험 중</b>이라 공연 전에도 눌러 볼 수 있어요. 담당자 화면에 바로 표시돼요.' : '극장에 도착한 뒤에 눌러 주세요. 담당자 화면에 바로 표시돼요.') + '</p>';
     if (today > x.show) return '<div class="mutebox">지난 공연이에요. 관람해 주셔서 고맙습니다.</div>';
     return '<button type="button" class="rv-btn rv-btn-ok rv-btn-wide rv-btn-big" disabled>공연장에 도착했어요</button>'
       + '<p class="rv-center">공연 당일(' + esc(R.dateLabel(x.show)) + ') 극장에 도착하면 누를 수 있어요.</p>';
