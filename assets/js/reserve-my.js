@@ -19,7 +19,7 @@
       + '<p class="rv-err" role="alert">' + esc(msg || '') + '</p>'
       + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">예약 확인하기</button>'
       + '</form>'
-      + '<p class="rv-sub" style="margin:0;font-size:15px">비밀번호를 잊으셨으면 <a href="tel:01085841753">010-8584-1753</a>으로 연락 주세요. 아직 예약하지 않으셨다면 <a href="./">좌석 예약</a>으로 가세요.</p>'
+      + '<p class="rv-sub" style="margin:0;font-size:15px">비밀번호를 잊으셨으면 <a href="tel:' + R.EVENT.phone.replace(/-/g, '') + '">' + R.EVENT.phone + '</a>로 연락 주세요. 아직 예약하지 않으셨다면 <a href="./">좌석 예약</a>으로 가세요.</p>'
       + '</div>';
     var form = U.$('form', root);
     form.elements.email.focus();
@@ -93,7 +93,7 @@
         + (active && today < x.show ? '<button type="button" class="rv-link" data-cancel="' + esc(x.id) + '">예약 취소하기</button>' : '')
         + '</div></article>';
     }).join('');
-    html += '<p class="rv-sub" style="margin-top:22px">문의 <a href="tel:01085841753">010-8584-1753</a> · 공연 10~15분 전까지 도착해 주세요.</p>';
+    html += '<p class="rv-sub" style="margin-top:22px">문의 <a href="tel:' + R.EVENT.phone.replace(/-/g, '') + '">' + R.EVENT.phone + '</a> · 공연 10~15분 전까지 도착해 주세요.</p>';
     root.innerHTML = html;
     list.forEach(function (x) {
       var host = root.querySelector('[data-mini="' + x.id + '"]');

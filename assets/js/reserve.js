@@ -118,13 +118,13 @@
   function pick(id) {
     if (!S.data) return;
     var info = showInfo(S.show);
-    if (!info.open) { U.toast(info.closed ? '이 회차는 예약이 끝났어요.' : '지금은 온라인 예약을 받지 않아요. ' + R.EVENT.phone + '으로 문의해 주세요.', true); return; }
+    if (!info.open) { U.toast(info.closed ? '이 회차는 예약이 끝났어요.' : '지금은 온라인 예약을 받지 않아요. ' + R.EVENT.phone + '로 문의해 주세요.', true); return; }
     var i = S.sel.indexOf(id);
     if (i >= 0) S.sel.splice(i, 1);
     else {
       var code = occ()[id];
       if (code) { U.toast(code === 'h' ? '다른 분이 지금 이 좌석을 예약하고 있어요. 잠시 뒤에 다시 확인해 주세요.' : code === 'w' ? '다른 분이 신청해서 승인 대기 중인 좌석이에요.' : '이미 예약된 좌석이에요.'); return; }
-      if (S.sel.length >= S.data.max) { U.toast('한 번에 ' + S.data.max + '석까지 고를 수 있어요. 단체는 ' + R.EVENT.phone + '으로 문의해 주세요.', true); return; }
+      if (S.sel.length >= S.data.max) { U.toast('한 번에 ' + S.data.max + '석까지 고를 수 있어요. 단체는 ' + R.EVENT.phone + '로 문의해 주세요.', true); return; }
       S.sel.push(id);
       S.sel.sort(R.seatSort);
       if (R.WHEEL.indexOf(id) >= 0) U.toast('휠체어석이에요. 휠체어를 이용하는 관객만 골라 주세요.');

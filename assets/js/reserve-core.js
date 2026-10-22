@@ -14,7 +14,7 @@ var RSV = (function () {
     venue: '안데르센극장',
     address: '부산광역시 기장군 장안읍 장안로 211',
     org: '극단 도깨비',
-    phone: '010-8584-1753',
+    phone: '010-3837-8479',
     shows: [
       { id: '2026-11-24', time: '10:30' },
       { id: '2026-11-25', time: '10:30' },
@@ -266,12 +266,12 @@ var RSV = (function () {
     if (!(+req.elapsed > 3000)) return fail('slow', '잠시 후 다시 눌러 주세요.');
     var cfg = settings(env), show = findShow(str(req.show));
     if (!show) return fail('show', '공연 회차를 골라 주세요.');
-    if (!cfg.open) return fail('closed', '지금은 온라인 예약을 받지 않아요. ' + EVENT.phone + '으로 문의해 주세요.');
+    if (!cfg.open) return fail('closed', '지금은 온라인 예약을 받지 않아요. ' + EVENT.phone + '로 문의해 주세요.');
     if (env.now() >= show.id + ' ' + show.time) return fail('closed', '이 회차는 예약이 끝났어요.');
     var seats = seatList(req.seats);
     if (!seats.length) return fail('seats', '좌석을 골라 주세요.');
     if (seats.some(function (s) { return !SEAT_SET[s]; })) return fail('seats', '없는 좌석이 있어요. 새로고침해 주세요.');
-    if (seats.length > cfg.max) return fail('seats', '한 번에 ' + cfg.max + '석까지 예약할 수 있어요. 단체 관람은 ' + EVENT.phone + '으로 문의해 주세요.');
+    if (seats.length > cfg.max) return fail('seats', '한 번에 ' + cfg.max + '석까지 예약할 수 있어요. 단체 관람은 ' + EVENT.phone + '로 문의해 주세요.');
 
     var errors = {};
     var name = clean(req.name, 30), org = clean(req.org, 60), phone = clean(req.phone, 20), email = normEmail(req.email);
@@ -288,7 +288,7 @@ var RSV = (function () {
     if (!env.sha256) return fail('server', '서버 설정이 끝나지 않았어요.');
 
     var rl = 'rsvn:' + digits, n = +(env.cache.get(rl) || 0);
-    if (n >= 5) return fail('many', '신청이 너무 많아요. ' + EVENT.phone + '으로 문의해 주세요.');
+    if (n >= 5) return fail('many', '신청이 너무 많아요. ' + EVENT.phone + '로 문의해 주세요.');
 
     var out = null;
     env.lock(function () {
@@ -301,7 +301,7 @@ var RSV = (function () {
       var dup = recs.filter(function (x) {
         return x.show === show.id && (x.status === ST.WAIT || x.status === ST.OK) && (x.email === email || x.phone.replace(/\D/g, '') === digits);
       })[0];
-      if (dup) { out = fail('dup', '이미 이 회차에 같은 연락처나 이메일로 신청한 예약이 있어요. ‘내 예약 확인’에서 확인해 주세요. 좌석을 더하거나 바꾸려면 ' + EVENT.phone + '으로 연락 주세요.'); return; }
+      if (dup) { out = fail('dup', '이미 이 회차에 같은 연락처나 이메일로 신청한 예약이 있어요. ‘내 예약 확인’에서 확인해 주세요. 좌석을 더하거나 바꾸려면 ' + EVENT.phone + '로 연락 주세요.'); return; }
       var ids = {}; recs.forEach(function (x) { ids[x.id] = true; });
       var id;
       do { id = 'R' + show.id.slice(5).replace('-', '') + '-' + env.uuid().slice(0, 4).toUpperCase(); } while (ids[id]);
@@ -377,7 +377,7 @@ var RSV = (function () {
   function guestCancel(req, env) {
     var res = guestUpdate(req, env, function (x) {
       if (x.status !== ST.WAIT && x.status !== ST.OK) return fail('status', '이미 취소되었거나 처리된 예약이에요.');
-      if (env.today() >= x.show) return fail('day', '공연 당일에는 ' + EVENT.phone + '으로 연락해 주세요.');
+      if (env.today() >= x.show) return fail('day', '공연 당일에는 ' + EVENT.phone + '로 연락해 주세요.');
       x.status = ST.CANCEL; x.decidedAt = env.now();
       x.memo = clean((x.memo ? x.memo + '\n' : '') + env.now() + ' 예약자가 직접 취소', 500);
       return { ok: true, x: x };

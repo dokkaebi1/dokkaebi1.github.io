@@ -146,7 +146,7 @@
   var meta = document.querySelector('meta[name="dokkaebi-api"]');
   var API = meta ? meta.getAttribute('content') : '';
   function api(action, data) {
-    if (!API) return Promise.resolve({ ok: false, code: 'off', message: '예약 서버가 아직 연결되지 않았어요. ' + R.EVENT.phone + '으로 문의해 주세요.' });
+    if (!API) return Promise.resolve({ ok: false, code: 'off', message: '예약 서버가 아직 연결되지 않았어요. ' + R.EVENT.phone + '로 문의해 주세요.' });
     return fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ action: action }, data || {})), redirect: 'follow' })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .catch(function () { return { ok: false, code: 'network', message: '연결이 잠시 원활하지 않아요. 잠시 후 다시 시도해 주세요.' }; });
