@@ -1,11 +1,12 @@
 /* 좌석 예약 관리: 신청 승인 · 좌석 배치도(막기·전화 예약 등록) · 공연 당일 입장(도착) · 설정
-   들어오는 법: 관리자(구글 로그인) → '좌석 예약 관리' → 6시간 동안 쓰는 관리 열쇠가 주소(#k=...)로 넘어옵니다 */
+   들어오는 법: ① 이 화면에서 아이디·비밀번호 (8시간)
+              ② 관리자(구글 로그인) → '좌석 예약 관리' → 관리 열쇠(6시간)가 주소(#k=...)로 넘어옴 */
 (function () {
   'use strict';
   var R = window.RSV, U = window.RSVUI, esc = U.esc;
   var KEY = 'dk-rsv-admin';
   var ENTRY = (document.querySelector('meta[name="dokkaebi-rsv-admin"]') || {}).content || '';
-  var S = { token: null, data: null, tab: 'list', show: 'all', filter: '승인 대기', q: '', pick: [], focus: null, gate: null, seenWait: null, pending: false, map: null, mapShow: null };
+  var S = { poller: null, token: null, data: null, tab: 'list', show: 'all', filter: '승인 대기', q: '', pick: [], focus: null, gate: null, seenWait: null, pending: false, map: null, mapShow: null };
   var root = U.$('#ad-root');
   var TITLE = document.title;
 
@@ -16,15 +17,27 @@
 
   function locked(msg) {
     try { sessionStorage.removeItem(KEY); } catch (e) {}
-    S.token = null;
+    S.token = null; S.data = null;
+    document.title = TITLE;
     root.innerHTML = '<div class="rv-card rv-login" style="margin-top:20px"><span class="rv-eyebrow">관리자</span><h2>좌석 예약 관리</h2>'
-      + '<p class="rv-sub" style="margin:0">' + esc(msg || '관리자 페이지에서 들어와 주세요.') + '</p>'
-      + (ENTRY ? '<a class="rv-btn rv-btn-red rv-btn-wide" href="' + esc(ENTRY) + '">구글 로그인으로 관리 열쇠 받기</a>' : '')
-      + '<p class="rv-sub" style="margin:0;font-size:14px">극단 도깨비 구글 계정으로 로그인하면 열쇠가 만들어져 이 화면으로 돌아옵니다. 열쇠는 6시간 동안 쓸 수 있어요.</p></div>';
+      + '<form data-login novalidate style="display:grid;gap:14px">'
+      + '<label class="rv-fld"><span>아이디</span><input name="id" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>'
+      + '<label class="rv-fld"><span>비밀번호</span><input name="password" type="password" autocomplete="current-password" required></label>'
+      + '<p class="rv-err" role="alert">' + esc(msg || '') + '</p>'
+      + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">들어가기</button></form>'
+      + '<p class="rv-sub" style="margin:0;font-size:14px">한 번 들어오면 8시간 동안 쓸 수 있어요. 비밀번호를 5번 틀리면 15분 동안 잠겨요.</p>'
+      + (ENTRY ? '<p class="rv-sub" style="margin:0;font-size:14px">극단 도깨비 구글 계정이 있으면 <a href="' + esc(ENTRY) + '">구글 로그인으로 들어가기</a></p>' : '')
+      + '</div>';
+    var f = U.$('form[data-login]', root);
+    if (f) f.elements.id.focus();
+  }
+  function start() {
+    root.innerHTML = '<p class="rv-sub">불러오는 중이에요...</p>';
+    if (S.poller) S.poller.now(); else S.poller = U.poll(load, 6000);
   }
   function call(action, data) {
     return U.api(action, Object.assign({ token: S.token }, data || {})).then(function (r) {
-      if (r && r.code === 'auth') { locked('관리 열쇠 시간이 지났어요. 다시 받아 주세요.'); throw r; }
+      if (r && r.code === 'auth') { locked('로그인 시간이 지났어요. 다시 들어와 주세요.'); throw r; }
       return r;
     });
   }
@@ -248,6 +261,14 @@
       + '<label class="rv-consent" style="font-size:16px;color:var(--ink);font-weight:700;margin:0"><input type="checkbox" name="open"' + (s.open ? ' checked' : '') + '> 홈페이지에서 온라인 예약 받기</label>'
       + '<label class="rv-fld" style="max-width:260px"><span>한 번에 예약할 수 있는 최대 좌석 수</span><input name="max" type="number" min="1" max="242" value="' + s.max + '"></label>'
       + '<button class="rv-btn rv-btn-red rv-btn-sm" type="submit" style="justify-self:start">설정 저장</button></form></div>'
+      + '<div class="rv-card" style="max-width:640px;margin-top:16px"><form data-cred novalidate style="display:grid;gap:14px">'
+      + '<b>관리 화면 아이디·비밀번호 바꾸기</b>'
+      + '<label class="rv-fld" style="max-width:320px"><span>아이디</span><input name="id" value="' + esc(d.adminId || '') + '" autocomplete="username" autocapitalize="off" spellcheck="false"></label>'
+      + '<div class="rv-two"><label class="rv-fld"><span>새 비밀번호</span><input name="password" type="password" autocomplete="new-password"></label>'
+      + '<label class="rv-fld"><span>새 비밀번호 확인</span><input name="password2" type="password" autocomplete="new-password"></label></div>'
+      + '<p class="rv-sub" style="margin:0;font-size:14px">예약자 이름·연락처를 보는 화면이라 8자 넘게, 숫자만이 아닌 비밀번호를 권해요. 바꾸면 다른 사람에게도 새 비밀번호를 알려 주세요.</p>'
+      + '<p class="rv-err" role="alert"></p>'
+      + '<button class="rv-btn rv-btn-ink rv-btn-sm" type="submit" style="justify-self:start">아이디·비밀번호 저장</button></form></div>'
       + '<dl class="ad-dl ad-info">'
       + '<div><dt>새 신청 알림 메일</dt><dd>' + esc(d.notifyEmail || '(없음)') + ' <small>바꾸려면 기존 관리자 페이지 › 설정</small></dd></div>'
       + '<div><dt>오늘 남은 메일 발송</dt><dd>' + (d.mailQuota == null ? '확인 불가' : d.mailQuota + '통') + ' <small>구글 무료 계정은 하루 100통까지 보낼 수 있어요</small></dd></div>'
@@ -334,6 +355,29 @@
   root.addEventListener('submit', function (e) {
     var f = e.target; e.preventDefault();
     var btn = U.$('[type=submit]', f);
+    if (f.hasAttribute('data-login')) {
+      btn.disabled = true;
+      U.api('rsvAdminLogin', { id: f.elements.id.value, password: f.elements.password.value }).then(function (r) {
+        btn.disabled = false;
+        if (!r.ok) { U.$('.rv-err', f).textContent = r.message; f.elements.password.select(); return; }
+        S.token = r.token;
+        try { sessionStorage.setItem(KEY, r.token); } catch (x) {}
+        start();
+      });
+      return;
+    }
+    if (f.hasAttribute('data-cred')) {
+      if (f.elements.password.value !== f.elements.password2.value) { U.fieldErrors(f, { password2: '새 비밀번호가 서로 달라요' }); return; }
+      btn.disabled = true;
+      call('rsvAdminCred', { id: f.elements.id.value, password: f.elements.password.value }).then(function (r) {
+        btn.disabled = false;
+        if (r.code === 'invalid') { U.fieldErrors(f, r.errors); return; }
+        if (!r.ok) { U.toast(r.message, true); return; }
+        U.fieldErrors(f, {}); f.elements.password.value = ''; f.elements.password2.value = '';
+        U.toast('아이디·비밀번호를 바꿨어요. 다음 로그인부터 새 비밀번호를 쓰세요.');
+      });
+      return;
+    }
     if (f.hasAttribute('data-settings')) {
       btn.disabled = true;
       call('rsvAdminSettings', { open: f.elements.open.checked, max: f.elements.max.value }).then(function (r) { btn.disabled = false; after(r, '설정을 저장했어요.'); });
@@ -353,5 +397,5 @@
   });
 
   if (!S.token) locked();
-  else { root.innerHTML = '<p class="rv-sub">불러오는 중이에요...</p>'; U.poll(load, 6000); }
+  else start();
 })();

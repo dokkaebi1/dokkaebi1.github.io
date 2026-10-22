@@ -390,6 +390,33 @@ var RSV = (function () {
   }
 
   /* ---------- 관리자 (홈페이지 관리자 비밀번호로 로그인한 토큰) ---------- */
+  /* 아이디·비밀번호로 관리 화면 들어가기. 5번 틀리면 15분 잠김 */
+  var ADMIN_SEC = 28800;
+  function adminLogin(req, env) {
+    if (!env.adminCred || !env.sha256) return fail('off', '아이디 로그인이 준비되지 않았어요.');
+    var fails = +(env.cache.get('rsvadmfail') || 0);
+    if (fails >= 5) return fail('locked', '비밀번호를 여러 번 틀려서 15분 동안 잠겼어요. 잠시 뒤 다시 해 주세요.');
+    var c = env.adminCred(), id = clean(req.id, 60).toLowerCase(), pw = str(req.password);
+    if (!c || !c.id || id !== str(c.id).toLowerCase() || env.sha256(c.salt + ':' + pw) !== c.hash) {
+      env.cache.put('rsvadmfail', String(fails + 1), 900);
+      return fail('login', '아이디나 비밀번호가 맞지 않아요.' + (fails >= 2 ? ' (' + (4 - fails) + '번 더 틀리면 15분 동안 잠겨요)' : ''));
+    }
+    env.cache.remove('rsvadmfail');
+    var token = env.uuid() + env.uuid();
+    env.cache.put('rsvadm:' + token, '1', ADMIN_SEC);
+    return { ok: true, token: token };
+  }
+  function adminSetCred(req, env) {
+    if (!env.setAdminCred) return fail('off', '바꿀 수 없어요.');
+    var id = clean(req.id, 40), pw = str(req.password), errors = {};
+    if (!/^[A-Za-z0-9._@-]{3,40}$/.test(id)) errors.id = '아이디는 영문·숫자·.-_@ 3~40자로 정해 주세요';
+    if (pw.length < 4 || pw.length > 60) errors.password = '비밀번호는 4~60자로 정해 주세요';
+    if (Object.keys(errors).length) return fail('invalid', '입력한 내용을 확인해 주세요.', { errors: errors });
+    var salt = env.uuid().slice(0, 16);
+    env.setAdminCred({ id: id, salt: salt, hash: env.sha256(salt + ':' + pw) });
+    return { ok: true, id: id };
+  }
+
   function isAdmin(req, env) { var t = str(req.token); return !!t && !!env.isAdmin && !!env.isAdmin(t); }
   function adminData(env) {
     var cfg = settings(env), recs = readAll(env), occ = occupancy(recs), quota = null, sheetUrl = '';
@@ -397,7 +424,7 @@ var RSV = (function () {
     try { if (env.sheetUrl) sheetUrl = env.sheetUrl(); } catch (e) {}
     return {
       ok: true, now: env.now(), today: env.today(), ver: env.props.get('RSV_VER') || '0', settings: cfg, event: EVENT,
-      notifyEmail: notifyTo(env), mailQuota: quota, sheetUrl: sheetUrl,
+      notifyEmail: notifyTo(env), mailQuota: quota, sheetUrl: sheetUrl, adminId: env.adminCred ? str((env.adminCred() || {}).id) : '',
       shows: EVENT.shows.map(function (s) { return showState(s, env, cfg, occ); }),
       holds: holdMap(env, ''),
       list: recs.map(adminView).reverse()
@@ -534,6 +561,7 @@ var RSV = (function () {
       if (a === 'rsvMine') return listMine(req, env);
       if (a === 'rsvArrive') return arrive(req, env);
       if (a === 'rsvCancel') return guestCancel(req, env);
+      if (a === 'rsvAdminLogin') return adminLogin(req, env);
       if (a.indexOf('rsvAdmin') === 0) {
         if (!isAdmin(req, env)) return fail('auth', '관리자 로그인이 필요해요.');
         switch (a) {
@@ -546,6 +574,7 @@ var RSV = (function () {
           case 'rsvAdminRemove': return adminRemove(req, env);
           case 'rsvAdminBook': return adminBook(req, env);
           case 'rsvAdminSettings': return saveSettings(req, env);
+          case 'rsvAdminCred': return adminSetCred(req, env);
         }
       }
       return fail('action', '알 수 없는 요청입니다.');
