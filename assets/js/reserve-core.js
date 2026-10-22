@@ -66,7 +66,7 @@ var RSV = (function () {
     ['name', '예약자'], ['org', '기관·단체'], ['phone', '연락처'], ['email', '이메일'], ['note', '요청사항'], ['memo', '관리자 메모'],
     ['arrivedAt', '도착 시각'], ['decidedAt', '처리 일시'], ['mailLog', '메일 기록'], ['pw', '비밀번호(암호화 · 고치지 마세요)']] };
   var DEFAULT_MAX = 30;
-  var HOLD_SEC = 240;   // 고르는 중인 좌석을 '예약 중'으로 잡아 두는 시간(초). 화면이 열려 있으면 1분마다 연장됩니다
+  var HOLD_SEC = 300;   // 고르는 중인 좌석을 '예약 중'으로 잡아 두는 시간(초). 처음 고른 때부터 5분, 연장 없음 — 그 안에 신청하지 않으면 풀립니다
 
   /* ---------- 작은 도구 ---------- */
   var WEEK = ['일', '월', '화', '수', '목', '금', '토'];
@@ -169,7 +169,8 @@ var RSV = (function () {
     for (var k in m) if ((holder && m[k].h === holder) || set[k]) delete m[k];
     writeHolds(env, show, m);
   }
-  /* 손님이 좌석을 누를 때마다: 이 사람의 잡아 둔 좌석을 seats 로 바꿈. 다른 사람이 예약했거나 잡아 둔 좌석은 빼고 알려 줌 */
+  /* 손님이 좌석을 누를 때마다: 이 사람의 잡아 둔 좌석을 seats 로 바꿈. 다른 사람이 예약했거나 잡아 둔 좌석은 빼고 알려 줌.
+     끝나는 시각은 이 사람이 (이 회차에서) 처음 좌석을 고른 때 + 5분. 좌석을 더 골라도 늘어나지 않습니다 */
   function hold(req, env) {
     var holder = str(req.holder), show = findShow(str(req.show));
     if (!holderOk(holder) || !show) return fail('invalid', '새로고침해 주세요.');
@@ -178,14 +179,15 @@ var RSV = (function () {
     var out = null;
     env.lock(function () {
       var occ = publicState(env).seats[show.id] || {}, m = readHolds(env, show.id), now = nowMs(env);
-      var got = [], lost = [];
-      for (var k in m) if (m[k].h === holder) delete m[k];
+      var got = [], lost = [], until = 0;
+      for (var k in m) if (m[k].h === holder) { until = until ? Math.min(until, m[k].t) : m[k].t; delete m[k]; }
+      if (!until) until = now + HOLD_SEC * 1000;
       seats.forEach(function (x) {
         if (occ[x] || m[x]) lost.push(x);
-        else { m[x] = { h: holder, t: now + HOLD_SEC * 1000 }; got.push(x); }
+        else { m[x] = { h: holder, t: until }; got.push(x); }
       });
       writeHolds(env, show.id, m);
-      out = { ok: true, show: show.id, held: got, lost: lost, holds: holdMap(env, holder), sec: HOLD_SEC };
+      out = { ok: true, show: show.id, held: got, lost: lost, holds: holdMap(env, holder), sec: HOLD_SEC, now: now, until: got.length ? until : 0 };
     });
     return out;
   }
@@ -585,7 +587,7 @@ var RSV = (function () {
   }
 
   return {
-    EVENT: EVENT, ROWS: ROWS, SIDES: SIDES, WHEEL: WHEEL, SEATS: SEATS, ST: ST, STATUSES: STATUSES, SCHEMA: SCHEMA,
+    EVENT: EVENT, HOLD_SEC: HOLD_SEC, ROWS: ROWS, SIDES: SIDES, WHEEL: WHEEL, SEATS: SEATS, ST: ST, STATUSES: STATUSES, SCHEMA: SCHEMA,
     rowNums: rowNums, floorOf: floorOf, seatName: seatName, seatWhere: seatWhere, seatSort: seatSort, showLabel: showLabel, dateLabel: dateLabel, timeLabel: timeLabel, findShow: findShow,
     handle: handle
   };

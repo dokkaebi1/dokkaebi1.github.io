@@ -2,8 +2,8 @@
 (function () {
   'use strict';
   var R = window.RSV, U = window.RSVUI, esc = U.esc;
-  var S = { data: null, show: null, sel: [], t0: Date.now(), map: null, busy: false, holds: {}, lastHold: 0, syncing: false, again: false, timer: null };
-  var POLL_MS = 5000, HOLD_REFRESH_MS = 60000;
+  var S = { data: null, show: null, sel: [], t0: Date.now(), map: null, busy: false, holds: {}, syncing: false, again: false, timer: null, deadline: null, warned: false };
+  var POLL_MS = 5000, HOLD_MS = (R.HOLD_SEC || 300) * 1000;
   /* 이 화면(브라우저 탭)의 이름표: 내가 고른 좌석을 다른 분 화면에 '예약 중'으로 보여 주는 데 씁니다 */
   var HOLDER = (function () {
     var k = 'dk-rsv-holder', v = null;
@@ -29,7 +29,7 @@
     return o;
   }
 
-  /* 고른 좌석을 서버에 알려 '예약 중'으로 잡아 둠 (누를 때마다 · 1분마다 연장) */
+  /* 고른 좌석을 서버에 알려 '예약 중'으로 잡아 둠. 처음 고른 때부터 5분 안에 신청하지 않으면 풀림 (연장 없음) */
   function syncHold() {
     if (!S.show) return Promise.resolve();
     if (S.syncing) { S.again = true; return Promise.resolve(); }
@@ -38,8 +38,8 @@
     return U.api('rsvHold', { show: show, seats: sent, holder: HOLDER }).then(function (r) {
       S.syncing = false;
       if (r.ok) {
-        S.lastHold = Date.now();
         S.holds = r.holds || S.holds;
+        if (show === S.show && S.sel.length && r.until) S.deadline = Date.now() + (r.until - r.now);   // 서버 시계 기준 남은 시간
         var lost = (r.lost || []).filter(function (x) { return S.sel.indexOf(x) >= 0 && show === S.show; });
         if (lost.length) {
           S.sel = S.sel.filter(function (x) { return lost.indexOf(x) < 0; });
@@ -82,8 +82,8 @@
         U.toast('고르신 ' + lost.join(', ') + ' 좌석이 방금 다른 분께 예약되었어요.', true);
         S.map.flash(lost);
       }
+      if (!S.sel.length) S.deadline = null;
       render();
-      if (S.sel.length && Date.now() - S.lastHold > HOLD_REFRESH_MS) syncHold();
     });
   }
 
@@ -100,8 +100,29 @@
     renderBar();
   }
 
+  /* 남은 시간: 1초마다 표시, 1분 남으면 알림, 0이 되면 고른 좌석을 비움 */
+  function clock(ms) { var s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
+  function tick() {
+    var els = document.querySelectorAll('[data-timer]');
+    if (!S.deadline || !S.sel.length) { els.forEach(function (e) { e.hidden = true; }); return; }
+    var left = S.deadline - Date.now();
+    if (left <= 0) { if (!S.busy) expire(); return; }
+    if (left <= 60000 && !S.warned) { S.warned = true; U.toast('1분 남았어요. 1분 안에 신청하지 않으면 고른 좌석이 풀려요.', true); }
+    els.forEach(function (e) { e.hidden = false; e.classList.toggle('warn', left <= 60000); e.textContent = '남은 시간 ' + clock(left); });
+  }
+  function expire() {
+    var gone = S.sel.slice();
+    S.sel = []; S.deadline = null; S.warned = false;
+    if (dlg.open && U.$('.done-pane', dlg).hidden) dlg.close();
+    render();
+    syncHold();
+    U.toast('5분 안에 신청하지 않아 고른 좌석(' + gone.join(', ') + ')이 풀렸어요. 다시 골라 주세요.', true);
+  }
+  setInterval(tick, 1000);
+
   function renderBar() {
     var n = S.sel.length;
+    if (!n) { S.deadline = null; S.warned = false; }
     bar.classList.toggle('show', n > 0);
     U.$('.picked b', bar).textContent = n ? R.dateLabel(S.show) + ' · ' + n + '석 선택' : '';
     U.$('.picked span', bar).textContent = S.sel.join(' · ');
@@ -111,7 +132,7 @@
     var b = e.target.closest('[data-show]');
     if (!b || b.disabled || b.dataset.show === S.show) return;
     if (S.sel.length) { U.toast('회차를 바꿔서 고른 좌석을 비웠어요.'); U.api('rsvHold', { show: S.show, seats: [], holder: HOLDER }); }
-    S.show = b.dataset.show; S.sel = [];
+    S.show = b.dataset.show; S.sel = []; S.deadline = null; S.warned = false;
     render();
   });
 
@@ -125,12 +146,14 @@
       var code = occ()[id];
       if (code) { U.toast(code === 'h' ? '다른 분이 지금 이 좌석을 예약하고 있어요. 잠시 뒤에 다시 확인해 주세요.' : code === 'w' ? '다른 분이 신청해서 승인 대기 중인 좌석이에요.' : '이미 예약된 좌석이에요.'); return; }
       if (S.sel.length >= S.data.max) { U.toast('한 번에 ' + S.data.max + '석까지 고를 수 있어요. 단체는 ' + R.EVENT.phone + '로 문의해 주세요.', true); return; }
+      if (!S.sel.length) { S.deadline = Date.now() + HOLD_MS; S.warned = false; }   // 서버 답이 오면 맞춤
       S.sel.push(id);
       S.sel.sort(R.seatSort);
       if (R.WHEEL.indexOf(id) >= 0) U.toast('휠체어석이에요. 휠체어를 이용하는 관객만 골라 주세요.');
     }
     S.map.update({ occ: occ(), sel: S.sel });
     renderBar();
+    tick();
     holdSoon();
   }
 
@@ -145,7 +168,9 @@
   }
   function openForm() {
     if (!S.sel.length) return;
-    U.$('[data-pick]', dlg).innerHTML = '<b>' + esc(R.showLabel(S.show)) + '</b><span class="seats">' + esc(S.sel.map(R.seatName).join(', ')) + ' · ' + S.sel.length + '석</span>';
+    U.$('[data-pick]', dlg).innerHTML = '<b>' + esc(R.showLabel(S.show)) + '</b><span class="seats">' + esc(S.sel.map(R.seatName).join(', ')) + ' · ' + S.sel.length + '석</span>'
+      + '<span class="rv-timer" data-timer hidden></span><small>좌석을 처음 고른 때부터 5분 안에 신청해 주세요. 시간이 지나면 좌석이 풀려요.</small>';
+    tick();
     panes(false);
     U.$('.rv-err', dlg).textContent = '';
     U.fieldErrors(form, {});
