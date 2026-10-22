@@ -113,7 +113,7 @@ var RSV = (function () {
   /* 손님에게 보여 줄 내용 (비밀번호·관리자 메모 제외) */
   function mine(x) {
     return { id: x.id, show: x.show, showLabel: showLabel(x.show), seats: x.seats, status: x.status, name: x.name, org: x.org, phone: x.phone,
-      email: x.email, note: x.note, arrivedAt: x.arrivedAt, createdAt: x.createdAt };
+      email: x.email, note: x.note, arrivedAt: x.arrivedAt, testArrival: isTestArrival(x), createdAt: x.createdAt };
   }
   function adminView(x) { var o = mine(x); o.memo = x.memo; o.decidedAt = x.decidedAt; o.mailLog = x.mailLog; o.hasPw = !!x.pw; return o; }
 
@@ -127,6 +127,24 @@ var RSV = (function () {
   /* 도착 확인 시험 모드: 관리자가 켜면 2시간 동안 공연 전에도 '도착했어요'를 눌러 볼 수 있음 (저절로 꺼짐) */
   var ARRIVE_TEST_MS = 2 * 3600 * 1000;
   function canArrive(env, x) { return env.today() === x.show || (settings(env).arriveTest && env.today() < x.show); }
+  /* 진짜 도착은 공연 당일에만 생기므로, 공연일이 아닌 날짜에 찍힌 도착은 '시험 도착'.
+     시험 모드가 꺼져 있으면(끄기 · 2시간 지남) 시험 도착을 모두 '입장 안 함'으로 되돌립니다 */
+  function isTestArrival(x) { return !!x.arrivedAt && x.arrivedAt.slice(0, 10) !== x.show; }
+  function clearTestArrivals(env) {
+    var n = 0;
+    env.lock(function () {
+      var recs = readAll(env);
+      recs.forEach(function (x) { if (isTestArrival(x)) { x.arrivedAt = ''; n++; } });
+      if (n) writeAll(env, recs);
+    });
+    return n;
+  }
+  /* 읽은 예약에 시험 도착이 남아 있는데 시험 모드가 꺼져 있으면 되돌리고 다시 읽음 */
+  function sweptRecs(env) {
+    var recs = readAll(env);
+    if (!settings(env).arriveTest && recs.some(isTestArrival)) { clearTestArrivals(env); recs = readAll(env); }
+    return recs;
+  }
   function siteUrl(env) { return str(env.siteUrl || 'https://dokkaebi1.github.io').replace(/\/+$/, ''); }
   function notifyTo(env) { try { return env.notifyEmail ? str(env.notifyEmail()) : ''; } catch (e) { return ''; } }
   function adminLink(env) { try { return env.adminUrl ? str(env.adminUrl()) : siteUrl(env) + '/reserve/admin.html'; } catch (e) { return siteUrl(env) + '/reserve/admin.html'; } }
@@ -428,7 +446,7 @@ var RSV = (function () {
   function listMine(req, env, token) {
     var g = guest(req, env);
     if (!g) return fail('auth', '다시 로그인해 주세요.');
-    var list = readAll(env).filter(function (x) { return g.ids.indexOf(x.id) >= 0 && x.email === g.email; }).map(mine);
+    var list = sweptRecs(env).filter(function (x) { return g.ids.indexOf(x.id) >= 0 && x.email === g.email; }).map(mine);
     var res = { ok: true, today: env.today(), now: env.now(), list: list, event: EVENT, arriveTest: settings(env).arriveTest };
     if (token) res.token = token;
     return res;
@@ -522,7 +540,7 @@ var RSV = (function () {
 
   function isAdmin(req, env) { var t = str(req.token); return !!t && !!env.isAdmin && !!env.isAdmin(t); }
   function adminData(env) {
-    var cfg = settings(env), recs = readAll(env), occ = occupancy(recs), quota = null, sheetUrl = '';
+    var cfg = settings(env), recs = sweptRecs(env), occ = occupancy(recs), quota = null, sheetUrl = '';
     try { if (env.mailQuota) quota = env.mailQuota(); } catch (e) {}
     try { if (env.sheetUrl) sheetUrl = env.sheetUrl(); } catch (e) {}
     return {
@@ -655,6 +673,20 @@ var RSV = (function () {
     });
     return out;
   }
+  /* 예약 전체 초기화: 모두 보관 탭으로 옮기고 좌석을 비움 (지우지 않음) */
+  function resetAll(req, env) {
+    if (req.confirm !== '초기화') return fail('confirm', '‘초기화’라고 적어 주세요.');
+    if (!env.archive) return fail('off', '보관 기능이 준비되지 않았어요.');
+    var moved = 0;
+    env.lock(function () {
+      var recs = readAll(env);
+      if (recs.length) env.archive(recs.map(fromRec), env.now());
+      moved = recs.length;
+      writeAll(env, []);
+    });
+    env.props.set('RSV_ARRIVE_TEST', '0');
+    return { ok: true, moved: moved };
+  }
   function saveSettings(req, env) {
     if (req.open !== undefined) env.props.set('RSV_OPEN', req.open ? '1' : '0');
     if (req.max !== undefined) {
@@ -662,9 +694,13 @@ var RSV = (function () {
       if (isNaN(n) || n < 1 || n > 242) return fail('invalid', '최대 좌석 수는 1~242 사이 숫자로 적어 주세요.');
       env.props.set('RSV_MAX', String(n));
     }
-    if (req.arriveTest !== undefined) env.props.set('RSV_ARRIVE_TEST', req.arriveTest ? String(nowMs(env) + ARRIVE_TEST_MS) : '0');
+    var cleared = 0;
+    if (req.arriveTest !== undefined) {
+      env.props.set('RSV_ARRIVE_TEST', req.arriveTest ? String(nowMs(env) + ARRIVE_TEST_MS) : '0');
+      if (!req.arriveTest) cleared = clearTestArrivals(env);
+    }
     bump(env);
-    return { ok: true, settings: settings(env) };
+    return { ok: true, settings: settings(env), cleared: cleared };
   }
 
   /* ---------- 요청 처리 ---------- */
@@ -695,6 +731,7 @@ var RSV = (function () {
           case 'rsvAdminMemo': return adminMemo(req, env);
           case 'rsvAdminPassword': return adminPassword(req, env);
           case 'rsvAdminEdit': return adminEdit(req, env);
+          case 'rsvAdminResetAll': return resetAll(req, env);
           case 'rsvAdminRemove': return adminRemove(req, env);
           case 'rsvAdminBook': return adminBook(req, env);
           case 'rsvAdminSettings': return saveSettings(req, env);

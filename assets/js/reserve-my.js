@@ -129,7 +129,7 @@
     if (x.status === R.ST.WAIT) return '<div class="waitbox">담당자가 확인하고 있어요. 확정되면 메일로 알려 드려요.</div>';
     if (x.status === R.ST.NO) return '<div class="mutebox">이번에는 예약이 확정되지 않았어요. 다른 좌석이나 회차로 <a href="seats.html">다시 신청</a>할 수 있어요.</div>';
     if (x.status === R.ST.CANCEL) return '<div class="mutebox">취소된 예약이에요.</div>';
-    if (x.arrivedAt) return '<div class="arrived"><span class="ic">✓</span><b>도착 확인 완료</b><span>' + esc(x.arrivedAt.slice(11)) + ' 도착 · 입구 안내 직원에게 이 화면을 보여 주세요</span></div>';
+    if (x.arrivedAt) return '<div class="arrived"><span class="ic">✓</span><b>도착 확인 완료' + (x.testArrival ? ' (시험)' : '') + '</b><span>' + esc(x.arrivedAt.slice(11)) + ' 도착 · ' + (x.testArrival ? '시험 모드가 끝나면 다시 ‘도착 전’으로 돌아가요' : '입구 안내 직원에게 이 화면을 보여 주세요') + '</span></div>';
     var test = S.data && S.data.arriveTest && today < x.show;
     if (today === x.show || test) return '<button type="button" class="rv-btn rv-btn-ok rv-btn-wide rv-btn-big" data-arrive="' + esc(x.id) + '">공연장에 도착했어요</button>'
       + '<p class="rv-center">' + (test ? '지금은 <b>도착 확인 시험 중</b>이라 공연 전에도 눌러 볼 수 있어요. 담당자 화면에 바로 표시돼요.' : '극장에 도착한 뒤에 눌러 주세요. 담당자 화면에 바로 표시돼요.') + '</p>';

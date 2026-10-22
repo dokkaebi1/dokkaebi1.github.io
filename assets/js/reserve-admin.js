@@ -146,7 +146,7 @@
     if (x.email) dl.push(['이메일', '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a>']);
     if (x.note) dl.push(['요청사항', esc(x.note)]);
     dl.push(['신청', esc(x.createdAt) + (x.decidedAt ? ' · 처리 ' + esc(x.decidedAt) : '')]);
-    if (x.arrivedAt) dl.push(['도착', '<b style="color:var(--arr)">' + esc(x.arrivedAt) + '</b>']);
+    if (x.arrivedAt) dl.push(['도착', '<b style="color:var(--arr)">' + esc(x.arrivedAt) + '</b>' + (x.testArrival ? ' · 시험 도착 (시험 모드가 꺼지면 저절로 지워져요)' : '')]);
     if (x.mailLog) dl.push(['메일', esc(x.mailLog).replace(/\n/g, '<br>')]);
     return '<article class="ad-card" data-id="' + esc(x.id) + '">'
       + '<div class="ad-card-h"><span class="st-badge ' + (x.arrivedAt && x.status === R.ST.OK ? 'arr' : BADGE[x.status]) + '">' + esc(x.arrivedAt && x.status === R.ST.OK ? '확정 · 도착' : x.status) + '</span>'
@@ -247,13 +247,13 @@
       + '<div class="ad-gate-stats"><div><small>도착</small><b>' + st.arrN + '<span> / ' + st.okN + '건</span></b></div><div><small>도착 좌석</small><b>' + st.arr + '<span> / ' + st.ok + '석</span></b></div>'
       + '<div><small>아직 안 옴</small><b>' + (st.okN - st.arrN) + '<span>건</span></b></div><div class="bar"><i style="width:' + pct + '%"></i></div></div>'
       + (S.data.settings.arriveTest
-        ? '<div class="waitbox ad-testbar"><span>도착 확인 시험 모드 켜짐 (' + esc(S.data.settings.arriveTestUntil) + '까지) · 공연 전에도 손님이 ‘도착했어요’를 누를 수 있어요. 시험 도착은 아래 목록에서 ‘취소’로 되돌려 주세요.</span><button type="button" class="rv-btn rv-btn-line rv-btn-sm" data-arrive-test="off">시험 모드 끄기</button></div>'
+        ? '<div class="waitbox ad-testbar"><span>도착 확인 시험 모드 켜짐 (' + esc(S.data.settings.arriveTestUntil) + '까지) · 공연 전에도 손님이 ‘도착했어요’를 누를 수 있어요. 시험 모드를 끄거나 시간이 지나면 시험 도착은 모두 ‘아직 안 옴’으로 되돌아가요.</span><button type="button" class="rv-btn rv-btn-line rv-btn-sm" data-arrive-test="off">시험 모드 끄기</button></div>'
         : '<div class="mutebox ad-testbar"><span>공연 전에 ‘공연장에 도착했어요’를 미리 시험해 보려면</span><button type="button" class="rv-btn rv-btn-ink rv-btn-sm" data-arrive-test="on">도착 시험 모드 켜기 (2시간)</button></div>')
       + (waits.length ? '<p class="waitbox">아직 승인 대기인 예약이 ' + waits.length + '건 있어요. <button type="button" class="rv-link" data-goto-wait>신청 관리에서 처리하기</button></p>' : '')
       + '<div class="ad-split gate"><div class="ad-gate-list">' + (list.length ? list.map(function (x) {
           return '<div class="ad-row' + (x.arrivedAt ? ' done' : '') + '" data-id="' + esc(x.id) + '"><div><b>' + esc(x.name) + '</b>' + (x.org ? ' <span>' + esc(x.org) + '</span>' : '')
             + '<div class="sts">' + esc(x.seats.join(' · ')) + ' (' + x.seats.length + '석)' + (x.phone ? ' · <a href="tel:' + esc(x.phone.replace(/[^\d+]/g, '')) + '">' + esc(x.phone) + '</a>' : '') + '</div></div>'
-            + (x.arrivedAt ? '<span class="t">✓ ' + esc(x.arrivedAt.slice(11)) + '</span><button type="button" class="rv-link" data-act="unarrive">취소</button>'
+            + (x.arrivedAt ? '<span class="t">✓ ' + esc(x.arrivedAt.slice(11)) + (x.testArrival ? ' (시험)' : '') + '</span><button type="button" class="rv-link" data-act="unarrive">취소</button>'
               : '<button type="button" class="rv-btn rv-btn-ok rv-btn-sm" data-act="arrive">도착 처리</button>') + '</div>';
         }).join('') : '<p class="mutebox">이 회차의 확정 예약이 없어요.</p>') + '</div>'
       + '<div class="rv-board"><div class="rv-boardhead"><ul class="rv-legend"><li><span class="sw arr"></span>도착</li><li><span class="sw t"></span>아직 안 옴</li><li><span class="sw w"></span>승인 대기</li><li><span class="sw b"></span>막음</li></ul></div>'
@@ -275,7 +275,7 @@
       + '<button class="rv-btn rv-btn-red rv-btn-sm" type="submit" style="justify-self:start">설정 저장</button></form></div>'
       + '<div class="rv-card" style="max-width:640px;margin-top:16px;gap:10px"><b>도착 확인 시험 모드</b>'
       + '<p class="rv-sub" style="margin:0;font-size:15px">켜면 2시간 동안 공연 날이 아니어도 손님 화면의 ‘공연장에 도착했어요’를 눌러 볼 수 있어요. 2시간 뒤 저절로 꺼져요. 확정된 예약에서만 눌러져요.</p>'
-      + (s.arriveTest ? '<p class="waitbox" style="margin:0">지금 켜져 있어요 · ' + esc(s.arriveTestUntil) + '에 꺼져요. 시험이 끝나면 ‘당일 입장’ 탭에서 ‘도착 취소’로 되돌려 주세요.</p>'
+      + (s.arriveTest ? '<p class="waitbox" style="margin:0">지금 켜져 있어요 · ' + esc(s.arriveTestUntil) + '에 꺼져요. 끄거나 시간이 지나면 시험으로 누른 도착은 모두 ‘아직 안 옴’으로 되돌아가요.</p>'
         + '<button type="button" class="rv-btn rv-btn-line rv-btn-sm" style="justify-self:start" data-arrive-test="off">시험 모드 끄기</button>'
         : '<button type="button" class="rv-btn rv-btn-ink rv-btn-sm" style="justify-self:start" data-arrive-test="on">2시간 동안 켜기</button>')
       + '</div>'
@@ -287,6 +287,9 @@
       + '<p class="rv-sub" style="margin:0;font-size:14px">예약자 이름·연락처를 보는 화면이라 8자 넘게, 숫자만이 아닌 비밀번호를 권해요. 바꾸면 다른 사람에게도 새 비밀번호를 알려 주세요.</p>'
       + '<p class="rv-err" role="alert"></p>'
       + '<button class="rv-btn rv-btn-ink rv-btn-sm" type="submit" style="justify-self:start">아이디·비밀번호 저장</button></form></div>'
+      + '<div class="rv-card" style="max-width:640px;margin-top:16px;gap:10px;border-color:#E9B7A9"><b>예약 전체 초기화 (시험 정리용)</b>'
+      + '<p class="rv-sub" style="margin:0;font-size:15px">지금 있는 예약을 모두 구글 시트의 ‘좌석예약 보관’ 탭으로 옮기고 좌석을 전부 비워요. 지워지지 않고 보관 탭에 남아요. 손님 예약을 받기 시작한 뒤에는 누르지 마세요.</p>'
+      + '<button type="button" class="rv-btn rv-btn-line rv-btn-sm" style="justify-self:start" data-reset-all>예약 전체 초기화</button></div>'
       + '<dl class="ad-dl ad-info">'
       + '<div><dt>새 신청 알림 메일</dt><dd>' + esc(d.notifyEmail || '(없음)') + ' <small>바꾸려면 기존 관리자 페이지 › 설정</small></dd></div>'
       + '<div><dt>오늘 남은 메일 발송</dt><dd>' + (d.mailQuota == null ? '확인 불가' : d.mailQuota + '통') + ' <small>구글 무료 계정은 하루 100통까지 보낼 수 있어요</small></dd></div>'
@@ -384,9 +387,21 @@
       });
       return;
     }
+    if (t.hasAttribute('data-reset-all')) {
+      var n = S.data.list.length;
+      promptBox('예약 전체 초기화', '확인을 위해 ‘초기화’라고 적어 주세요', { text: '예약 ' + n + '건을 모두 ‘좌석예약 보관’ 탭으로 옮기고 좌석을 비워요. 손님에게 메일은 가지 않아요.', ok: '초기화하기' }).then(function (v) {
+        if (!v) return;
+        if (v.value.trim() !== '초기화') { U.toast('‘초기화’라고 적어야 진행돼요.', true); return; }
+        call('rsvAdminResetAll', { confirm: '초기화' }).then(function (r) { S.focus = null; S.pick = []; after(r, '예약 ' + (r.moved || 0) + '건을 보관 탭으로 옮기고 좌석을 모두 비웠어요.'); });
+      });
+      return;
+    }
     if (t.dataset.arriveTest) {
       t.disabled = true;
-      call('rsvAdminSettings', { arriveTest: t.dataset.arriveTest === 'on' }).then(function (r) { after(r, r.settings && r.settings.arriveTest ? '도착 확인 시험 모드를 켰어요 (' + r.settings.arriveTestUntil + '까지).' : '도착 확인 시험 모드를 껐어요.'); });
+      call('rsvAdminSettings', { arriveTest: t.dataset.arriveTest === 'on' }).then(function (r) {
+        after(r, r.settings && r.settings.arriveTest ? '도착 확인 시험 모드를 켰어요 (' + r.settings.arriveTestUntil + '까지).'
+          : '도착 확인 시험 모드를 껐어요.' + (r.cleared ? ' 시험 도착 ' + r.cleared + '건을 ‘아직 안 옴’으로 되돌렸어요.' : ''));
+      });
       return;
     }
     if (t.dataset.tab) { S.tab = t.dataset.tab; render(); return; }
