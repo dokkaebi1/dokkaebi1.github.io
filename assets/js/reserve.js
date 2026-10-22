@@ -2,19 +2,67 @@
 (function () {
   'use strict';
   var R = window.RSV, U = window.RSVUI, esc = U.esc;
-  var S = { data: null, show: null, sel: [], t0: Date.now(), map: null, busy: false };
-  var POLL_MS = 5000;
+  var S = { data: null, show: null, sel: [], t0: Date.now(), map: null, busy: false, holds: {}, lastHold: 0, syncing: false, again: false, timer: null };
+  var POLL_MS = 5000, HOLD_REFRESH_MS = 60000;
+  /* 이 화면(브라우저 탭)의 이름표: 내가 고른 좌석을 다른 분 화면에 '예약 중'으로 보여 주는 데 씁니다 */
+  var HOLDER = (function () {
+    var k = 'dk-rsv-holder', v = null;
+    try { v = sessionStorage.getItem(k); } catch (e) {}
+    if (!/^[a-f0-9]{24}$/.test(v || '')) {
+      var a = new Uint8Array(12); (window.crypto || window.msCrypto).getRandomValues(a);
+      v = Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+      try { sessionStorage.setItem(k, v); } catch (e) {}
+    }
+    return v;
+  })();
 
   var showsBox = U.$('#rv-shows'), board = U.$('#rv-hall'), live = U.$('#rv-live'), bar = U.$('.rv-bar'), dlg = U.$('#rv-dlg');
   U.$('#rv-legend').innerHTML = U.legend('public');
 
   S.map = U.hall(board, { onPick: pick });
 
-  function occ() { return (S.data && S.data.seats[S.show]) || {}; }
+  /* 예약된 좌석 + 다른 분이 지금 고르고 있는 좌석('h') */
+  function occ() {
+    var o = {}, a = (S.data && S.data.seats[S.show]) || {}, h = S.holds[S.show] || {}, k;
+    for (k in h) o[k] = 'h';
+    for (k in a) o[k] = a[k];
+    return o;
+  }
+
+  /* 고른 좌석을 서버에 알려 '예약 중'으로 잡아 둠 (누를 때마다 · 1분마다 연장) */
+  function syncHold() {
+    if (!S.show) return Promise.resolve();
+    if (S.syncing) { S.again = true; return Promise.resolve(); }
+    S.syncing = true;
+    var show = S.show, sent = S.sel.slice();
+    return U.api('rsvHold', { show: show, seats: sent, holder: HOLDER }).then(function (r) {
+      S.syncing = false;
+      if (r.ok) {
+        S.lastHold = Date.now();
+        S.holds = r.holds || S.holds;
+        var lost = (r.lost || []).filter(function (x) { return S.sel.indexOf(x) >= 0 && show === S.show; });
+        if (lost.length) {
+          S.sel = S.sel.filter(function (x) { return lost.indexOf(x) < 0; });
+          U.toast(lost.join(', ') + ' 좌석은 다른 분이 방금 고르셨어요. 다른 좌석을 골라 주세요.', true);
+          S.map.flash(lost);
+        }
+        S.map.update({ occ: occ(), sel: S.sel });
+        renderBar();
+      } else if (r.code === 'closed') U.toast(r.message, true);
+      if (S.again) { S.again = false; syncHold(); }
+    });
+  }
+  function holdSoon() { clearTimeout(S.timer); S.timer = setTimeout(syncHold, 250); }
+  function release(show) {
+    var body = JSON.stringify({ action: 'rsvHold', show: show, seats: [], holder: HOLDER });
+    var meta = document.querySelector('meta[name="dokkaebi-api"]'), api = meta && meta.content;
+    if (api && navigator.sendBeacon) navigator.sendBeacon(api, body);
+  }
+  window.addEventListener('pagehide', function () { if (S.sel.length && S.show) release(S.show); });
   function showInfo(id) { return S.data && S.data.shows.filter(function (s) { return s.id === id; })[0]; }
 
   function load() {
-    return U.api('rsvState').then(function (r) {
+    return U.api('rsvState', { holder: HOLDER }).then(function (r) {
       if (!r.ok) {
         live.classList.add('off'); live.lastChild.textContent = r.code === 'off' ? '연결 전' : '연결이 잠시 끊겼어요';
         if (!S.data) showsBox.innerHTML = '<p class="rv-err">' + esc(r.message) + '</p>';
@@ -22,6 +70,7 @@
       }
       live.classList.remove('off'); live.lastChild.textContent = '실시간 좌석 · ' + r.now.slice(11) + ' 기준';
       S.data = r;
+      S.holds = r.holds || {};
       if (!S.show || !showInfo(S.show)) {
         var first = r.shows.filter(function (s) { return s.open; })[0] || r.shows[0];
         S.show = first.id;
@@ -34,6 +83,7 @@
         S.map.flash(lost);
       }
       render();
+      if (S.sel.length && Date.now() - S.lastHold > HOLD_REFRESH_MS) syncHold();
     });
   }
 
@@ -60,7 +110,7 @@
   showsBox.addEventListener('click', function (e) {
     var b = e.target.closest('[data-show]');
     if (!b || b.disabled || b.dataset.show === S.show) return;
-    if (S.sel.length) U.toast('회차를 바꿔서 고른 좌석을 비웠어요.');
+    if (S.sel.length) { U.toast('회차를 바꿔서 고른 좌석을 비웠어요.'); U.api('rsvHold', { show: S.show, seats: [], holder: HOLDER }); }
     S.show = b.dataset.show; S.sel = [];
     render();
   });
@@ -73,7 +123,7 @@
     if (i >= 0) S.sel.splice(i, 1);
     else {
       var code = occ()[id];
-      if (code) { U.toast(code === 'w' ? '다른 분이 신청해서 승인 대기 중인 좌석이에요.' : '이미 예약된 좌석이에요.'); return; }
+      if (code) { U.toast(code === 'h' ? '다른 분이 지금 이 좌석을 예약하고 있어요. 잠시 뒤에 다시 확인해 주세요.' : code === 'w' ? '다른 분이 신청해서 승인 대기 중인 좌석이에요.' : '이미 예약된 좌석이에요.'); return; }
       if (S.sel.length >= S.data.max) { U.toast('한 번에 ' + S.data.max + '석까지 고를 수 있어요. 단체는 ' + R.EVENT.phone + '으로 문의해 주세요.', true); return; }
       S.sel.push(id);
       S.sel.sort(R.seatSort);
@@ -81,9 +131,10 @@
     }
     S.map.update({ occ: occ(), sel: S.sel });
     renderBar();
+    holdSoon();
   }
 
-  U.$('[data-clear]', bar).addEventListener('click', function () { S.sel = []; render(); });
+  U.$('[data-clear]', bar).addEventListener('click', function () { S.sel = []; render(); holdSoon(); });
   U.$('[data-apply]', bar).addEventListener('click', openForm);
 
   /* ---------- 예약 신청 ---------- */
@@ -115,7 +166,7 @@
     S.busy = true; btn.disabled = true; btn.textContent = '보내는 중...';
     U.api('rsvBook', {
       show: S.show, seats: S.sel, name: f.name.value, org: f.org.value, phone: f.phone.value, email: f.email.value,
-      password: f.password.value, note: f.note.value, consent: f.consent.checked, website: f.website.value, elapsed: Date.now() - S.t0
+      password: f.password.value, note: f.note.value, consent: f.consent.checked, website: f.website.value, elapsed: Date.now() - S.t0, holder: HOLDER
     }).then(function (r) {
       S.busy = false; btn.disabled = false; btn.textContent = '예약 신청하기';
       if (r.ok) {
@@ -134,7 +185,7 @@
         dlg.close();
         S.sel = S.sel.filter(function (s) { return r.taken.indexOf(s) < 0; });
         U.toast(r.message + ' — 다른 좌석을 골라 주세요.', true);
-        load().then(function () { S.map.flash(r.taken); });
+        load().then(function () { S.map.flash(r.taken); holdSoon(); });
         return;
       }
       U.$('.rv-err', dlg).textContent = r.message || '잠시 후 다시 시도해 주세요.';

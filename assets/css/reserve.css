@@ -104,6 +104,7 @@ html { -webkit-text-size-adjust: 100%; }
 .rv-legend li { display: inline-flex; align-items: center; gap: 6px; }
 .rv-legend .sw { width: 18px; height: 16px; border-radius: 5px; border: 1.5px solid var(--line); background: #fff; display: inline-block; }
 .rv-legend .sw.sel { background: var(--red-btn); border-color: var(--red-btn); }
+.rv-legend .sw.h { background: #FBE6DF; border: 1.5px dashed var(--red); }
 .rv-legend .sw.w { background: var(--wait); border-color: var(--wait); }
 .rv-legend .sw.t { background: var(--taken); border-color: var(--taken); }
 .rv-legend .sw.me { background: var(--jjok); border-color: var(--jjok); }
@@ -146,6 +147,9 @@ html { -webkit-text-size-adjust: 100%; }
 .seat.wh::after { content: "♿"; position: absolute; top: -11px; right: -4px; font-size: 10px; line-height: 1; }
 .seat.sel { background: var(--red-btn); border-color: var(--red-btn); color: #fff; }
 .seat.sel .r, .seat.me .r, .seat.arr .r { color: inherit; }
+.seat.h { background: #FBE6DF; border: 1.5px dashed var(--red); color: var(--red-d); cursor: not-allowed; animation: rvHold 1.6s ease-in-out infinite; }
+.seat.h .r { color: inherit; }
+@keyframes rvHold { 50% { background: #fff; } }
 .seat.w { background: var(--wait); border-color: var(--wait); color: var(--wait-ink); cursor: not-allowed; }
 .seat.w .r { color: inherit; }
 .seat.t { background: var(--taken); border-color: var(--taken); color: var(--taken-ink); cursor: not-allowed; }
@@ -278,7 +282,7 @@ html { -webkit-text-size-adjust: 100%; }
   .rv-info { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rv-live i, .seat.flash { animation: none; }
+  .rv-live i, .seat.flash, .seat.h { animation: none; }
   .rv-bar, .seat { transition: none; }
 }
 

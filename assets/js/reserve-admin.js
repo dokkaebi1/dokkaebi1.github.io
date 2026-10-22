@@ -160,7 +160,8 @@
 
   /* ---------- 좌석 배치도 ---------- */
   function occOf(show) {
-    var occ = {}, info = {}, arr = [];
+    var occ = {}, info = {}, arr = [], h = (S.data.holds || {})[show] || {};
+    for (var k in h) occ[k] = 'h';
     S.data.list.forEach(function (x) {
       if (x.show !== show) return;
       var code = x.status === R.ST.WAIT ? 'w' : x.status === R.ST.OK ? 't' : x.status === R.ST.BLOCK ? 'b' : '';

@@ -66,6 +66,7 @@ var RSV = (function () {
     ['name', '예약자'], ['org', '기관·단체'], ['phone', '연락처'], ['email', '이메일'], ['note', '요청사항'], ['memo', '관리자 메모'],
     ['arrivedAt', '도착 시각'], ['decidedAt', '처리 일시'], ['mailLog', '메일 기록'], ['pw', '비밀번호(암호화 · 고치지 마세요)']] };
   var DEFAULT_MAX = 30;
+  var HOLD_SEC = 240;   // 고르는 중인 좌석을 '예약 중'으로 잡아 두는 시간(초). 화면이 열려 있으면 1분마다 연장됩니다
 
   /* ---------- 작은 도구 ---------- */
   var WEEK = ['일', '월', '화', '수', '목', '금', '토'];
@@ -142,6 +143,53 @@ var RSV = (function () {
     return { id: s.id, date: s.id, time: s.time, label: showLabel(s.id), total: SEATS.length, left: SEATS.length - taken,
       closed: closed, open: cfg.open && !closed };
   }
+  /* ---------- 고르는 중인 좌석 잡아 두기 (구글 캐시, 회차별 {좌석: {h: 고르는 사람, t: 끝나는 시각(ms)}}) ---------- */
+  function nowMs(env) { return env.ms ? env.ms() : new Date().getTime(); }
+  function holderOk(h) { return /^[a-f0-9]{16,40}$/.test(str(h)); }
+  function readHolds(env, show) {
+    var m = {}, now = nowMs(env), out = {};
+    try { m = JSON.parse(env.cache.get('rsv:hold:' + show) || '{}') || {}; } catch (e) { m = {}; }
+    for (var k in m) if (m[k] && m[k].t > now) out[k] = m[k];
+    return out;
+  }
+  function writeHolds(env, show, m) { env.cache.put('rsv:hold:' + show, JSON.stringify(m), HOLD_SEC + 60); }
+  /* 다른 사람이 잡아 둔 좌석만 {좌석: 'h'} 로 */
+  function holdMap(env, me) {
+    var out = {};
+    EVENT.shows.forEach(function (s) {
+      var m = readHolds(env, s.id), o = {};
+      for (var k in m) if (m[k].h !== me) o[k] = 'h';
+      out[s.id] = o;
+    });
+    return out;
+  }
+  function releaseHolds(env, show, holder, seats) {
+    var m = readHolds(env, show), set = {};
+    (seats || []).forEach(function (x) { set[x] = true; });
+    for (var k in m) if ((holder && m[k].h === holder) || set[k]) delete m[k];
+    writeHolds(env, show, m);
+  }
+  /* 손님이 좌석을 누를 때마다: 이 사람의 잡아 둔 좌석을 seats 로 바꿈. 다른 사람이 예약했거나 잡아 둔 좌석은 빼고 알려 줌 */
+  function hold(req, env) {
+    var holder = str(req.holder), show = findShow(str(req.show));
+    if (!holderOk(holder) || !show) return fail('invalid', '새로고침해 주세요.');
+    var cfg = settings(env), seats = seatList(req.seats).filter(function (x) { return SEAT_SET[x]; }).slice(0, cfg.max);
+    if (seats.length && (!cfg.open || env.now() >= show.id + ' ' + show.time)) return fail('closed', '지금은 이 회차를 예약할 수 없어요.');
+    var out = null;
+    env.lock(function () {
+      var occ = publicState(env).seats[show.id] || {}, m = readHolds(env, show.id), now = nowMs(env);
+      var got = [], lost = [];
+      for (var k in m) if (m[k].h === holder) delete m[k];
+      seats.forEach(function (x) {
+        if (occ[x] || m[x]) lost.push(x);
+        else { m[x] = { h: holder, t: now + HOLD_SEC * 1000 }; got.push(x); }
+      });
+      writeHolds(env, show.id, m);
+      out = { ok: true, show: show.id, held: got, lost: lost, holds: holdMap(env, holder), sec: HOLD_SEC };
+    });
+    return out;
+  }
+
   function publicState(env) {
     var ver = env.props.get('RSV_VER') || '0', key = 'rsv:pub:' + ver;
     var hit = env.cache.get(key);
@@ -247,6 +295,13 @@ var RSV = (function () {
       var recs = readAll(env), occ = occupancy(recs)[show.id];
       var taken = seats.filter(function (s) { return occ[s]; });
       if (taken.length) { out = fail('taken', '방금 다른 분이 예약한 좌석이 있어요: ' + taken.join(', '), { taken: taken }); return; }
+      var holds = readHolds(env, show.id), me = str(req.holder);
+      var held = seats.filter(function (s) { return holds[s] && holds[s].h !== me; });
+      if (held.length) { out = fail('taken', '다른 분이 지금 예약하고 있는 좌석이 있어요: ' + held.join(', '), { taken: held }); return; }
+      var dup = recs.filter(function (x) {
+        return x.show === show.id && (x.status === ST.WAIT || x.status === ST.OK) && (x.email === email || x.phone.replace(/\D/g, '') === digits);
+      })[0];
+      if (dup) { out = fail('dup', '이미 이 회차에 같은 연락처나 이메일로 신청한 예약이 있어요. ‘내 예약 확인’에서 확인해 주세요. 좌석을 더하거나 바꾸려면 ' + EVENT.phone + '으로 연락 주세요.'); return; }
       var ids = {}; recs.forEach(function (x) { ids[x.id] = true; });
       var id;
       do { id = 'R' + show.id.slice(5).replace('-', '') + '-' + env.uuid().slice(0, 4).toUpperCase(); } while (ids[id]);
@@ -255,6 +310,7 @@ var RSV = (function () {
         note: note, memo: '', arrivedAt: '', decidedAt: '', mailLog: '', pw: salt + '$' + env.sha256(salt + ':' + pw) };
       env.store.append('rsv', fromRec(rec));
       bump(env);
+      releaseHolds(env, show.id, me, seats);
       out = { ok: true, id: id, show: show.id, showLabel: showLabel(show.id), seats: seats, status: ST.WAIT, rec: rec };
     });
     if (!out.ok) return out;
@@ -343,6 +399,7 @@ var RSV = (function () {
       ok: true, now: env.now(), today: env.today(), ver: env.props.get('RSV_VER') || '0', settings: cfg, event: EVENT,
       notifyEmail: notifyTo(env), mailQuota: quota, sheetUrl: sheetUrl,
       shows: EVENT.shows.map(function (s) { return showState(s, env, cfg, occ); }),
+      holds: holdMap(env, ''),
       list: recs.map(adminView).reverse()
     };
   }
@@ -448,6 +505,7 @@ var RSV = (function () {
       if (kind === ST.OK && email && req.notify !== false) logMail(rec, env.now() + ' 확정 메일', mailConfirm(env, rec));
       recs.push(rec);
       writeAll(env, recs);
+      releaseHolds(env, show.id, '', seats);
       out = { ok: true, item: adminView(rec) };
     });
     return out;
@@ -469,7 +527,8 @@ var RSV = (function () {
     try {
       if (env.ensure) env.ensure();
       var a = str(req.action);
-      if (a === 'rsvState') return publicState(env);
+      if (a === 'rsvState') { var st = publicState(env); st.holds = holdMap(env, str(req.holder)); return st; }
+      if (a === 'rsvHold') return hold(req, env);
       if (a === 'rsvBook') return book(req, env);
       if (a === 'rsvLogin') return guestLogin(req, env);
       if (a === 'rsvMine') return listMine(req, env);
