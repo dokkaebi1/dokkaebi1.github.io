@@ -246,7 +246,9 @@
       }).join('') + '</div>'
       + '<div class="ad-gate-stats"><div><small>도착</small><b>' + st.arrN + '<span> / ' + st.okN + '건</span></b></div><div><small>도착 좌석</small><b>' + st.arr + '<span> / ' + st.ok + '석</span></b></div>'
       + '<div><small>아직 안 옴</small><b>' + (st.okN - st.arrN) + '<span>건</span></b></div><div class="bar"><i style="width:' + pct + '%"></i></div></div>'
-      + (S.data.settings.arriveTest ? '<p class="waitbox">도착 확인 시험 모드가 켜져 있어요 (' + esc(S.data.settings.arriveTestUntil) + '까지). 시험 도착은 아래 목록에서 ‘취소’로 되돌릴 수 있어요.</p>' : '')
+      + (S.data.settings.arriveTest
+        ? '<div class="waitbox ad-testbar"><span>도착 확인 시험 모드 켜짐 (' + esc(S.data.settings.arriveTestUntil) + '까지) · 공연 전에도 손님이 ‘도착했어요’를 누를 수 있어요. 시험 도착은 아래 목록에서 ‘취소’로 되돌려 주세요.</span><button type="button" class="rv-btn rv-btn-line rv-btn-sm" data-arrive-test="off">시험 모드 끄기</button></div>'
+        : '<div class="mutebox ad-testbar"><span>공연 전에 ‘공연장에 도착했어요’를 미리 시험해 보려면</span><button type="button" class="rv-btn rv-btn-ink rv-btn-sm" data-arrive-test="on">도착 시험 모드 켜기 (2시간)</button></div>')
       + (waits.length ? '<p class="waitbox">아직 승인 대기인 예약이 ' + waits.length + '건 있어요. <button type="button" class="rv-link" data-goto-wait>신청 관리에서 처리하기</button></p>' : '')
       + '<div class="ad-split gate"><div class="ad-gate-list">' + (list.length ? list.map(function (x) {
           return '<div class="ad-row' + (x.arrivedAt ? ' done' : '') + '" data-id="' + esc(x.id) + '"><div><b>' + esc(x.name) + '</b>' + (x.org ? ' <span>' + esc(x.org) + '</span>' : '')

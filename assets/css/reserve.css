@@ -445,3 +445,6 @@ html { -webkit-text-size-adjust: 100%; }
 
 /* hidden 속성은 항상 숨김 (style 로 display 를 준 요소도) */
 .rv-body [hidden] { display: none !important; }
+
+/* 당일 입장 탭의 도착 시험 모드 줄 */
+.ad-testbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 0 0 14px; }
