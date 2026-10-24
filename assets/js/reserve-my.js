@@ -21,7 +21,7 @@
       + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">예약 확인하기</button>'
       + '</form>'
       + '<button type="button" class="rv-link" data-forgot>비밀번호를 잊으셨나요? 비밀번호 찾기</button>'
-      + '<p class="rv-sub" style="margin:0;font-size:15px">아직 예약하지 않으셨다면 <a href="seats.html">좌석 예약</a>으로 가세요. 문의 ' + U.telLinks() + '</p>'
+      + '<p class="rv-sub" style="margin:0;font-size:15px">아직 예약하지 않으셨다면 <a href="seats.html">좌석 예약</a>으로 가세요.<br>' + U.contactLinks() + '</p>'
       + '</div>';
     var form = U.$('form', root);
     if (email) form.elements.email.value = email;
@@ -166,7 +166,7 @@
         + (active && today < x.show ? '<button type="button" class="rv-link" data-cancel="' + esc(x.id) + '">예약 취소하기</button>' : '')
         + '</div></article>';
     }).join('');
-    html += '<p class="rv-sub" style="margin-top:22px">문의 ' + U.telLinks() + ' · 공연 10분 전까지 입장해 주세요. 공연 중 사진·동영상 촬영은 안 돼요.</p>';
+    html += '<p class="rv-sub" style="margin-top:22px">' + U.contactLinks() + '<br>공연 10분 전까지 입장해 주세요. 공연 중 사진·동영상 촬영은 안 돼요.</p>';
     root.innerHTML = html;
     list.forEach(function (x) {
       var host = root.querySelector('[data-mini="' + x.id + '"]');

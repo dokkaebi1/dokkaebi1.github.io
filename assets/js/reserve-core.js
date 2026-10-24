@@ -17,6 +17,8 @@ var RSV = (function () {
     host: '기장군',                    // 주최
     phones: ['010-5115-5406', '010-3837-8479'],   // 안내문의 문의 번호 순서
     phone: '010-5115-5406, 010-3837-8479',
+    email: 'gumbong777@hanmail.net',   // 예약 문의 메일 (안내문의 접수 메일)
+    sysPhone: '010-8584-1753',          // 예약 시스템(홈페이지 오류·로그인) 문의
     audience: '4세 이상 · 무료 관람',
     shows: [
       { id: '2026-11-24', time: '10:30' },
@@ -156,7 +158,8 @@ var RSV = (function () {
   }
   function siteUrl(env) { return str(env.siteUrl || 'https://dokkaebi1.github.io').replace(/\/+$/, ''); }
   function notifyTo(env) { try { return env.notifyEmail ? str(env.notifyEmail()) : ''; } catch (e) { return ''; } }
-  function adminLink(env) { try { return env.adminUrl ? str(env.adminUrl()) : siteUrl(env) + '/reserve/admin.html'; } catch (e) { return siteUrl(env) + '/reserve/admin.html'; } }
+  function adminLink(env) { return siteUrl(env) + '/reserve/admin.html'; }   // 홈페이지 예약 관리 (아이디·비밀번호)
+  function contactLines() { return ['공연 문의: ' + EVENT.phone + ' · 예약 문의 메일: ' + EVENT.email, '예약 시스템(홈페이지) 문의: ' + EVENT.sysPhone]; }
 
   /* ---------- 좌석 현황 ---------- */
   function occupancy(recs) {
@@ -269,7 +272,7 @@ var RSV = (function () {
     var to = notifyTo(env);
     var lines = (head ? [head, ''] : []).concat(ticketLines(x), ['연락처: ' + x.phone, '이메일: ' + x.email]);
     if (x.note) lines.push('요청사항: ' + x.note);
-    lines.push('', '예약 관리 화면에서 확인하고 승인해 주세요. (극단 도깨비 구글 계정 로그인)', adminLink(env));
+    lines.push('', '홈페이지 예약 관리에서 확인하고 승인해 주세요. (아이디·비밀번호로 로그인)', adminLink(env));
     return send(env, to, subject, lines, x.email ? { replyTo: x.email } : null);
   }
   function mailConfirm(env, x) {
@@ -285,15 +288,15 @@ var RSV = (function () {
     ], x.seats.map(function (s) { return '· ' + seatName(s) + ' — ' + seatWhere(s); }), [
       '',
       '공연 10분 전까지 입장을 마쳐 주세요. 공연 중 사진·동영상 촬영은 안 돼요.',
-      '문의: ' + EVENT.phone
-    ]));
+      ''
+    ], contactLines()));
   }
   function mailReject(env, x, reason) {
     return send(env, x.email, '[' + EVENT.org + '] 좌석 예약 안내 · ' + showLabel(x.show), [
       x.name + '님, 신청하신 좌석 예약을 이번에는 확정하지 못했습니다.', ''
     ].concat(ticketLines(x), reason ? ['', '안내: ' + reason] : [], [
-      '', '다른 좌석이나 회차로 다시 신청하실 수 있습니다.', siteUrl(env) + '/reserve/seats.html', '', '문의: ' + EVENT.phone
-    ]));
+      '', '다른 좌석이나 회차로 다시 신청하실 수 있습니다.', siteUrl(env) + '/reserve/seats.html', ''
+    ], contactLines()));
   }
   function logMail(x, what, err) { x.mailLog = clean((x.mailLog ? x.mailLog + '\n' : '') + what + (err ? ' ✗ ' + err : ' ✓'), 600); }
 
@@ -390,8 +393,8 @@ var RSV = (function () {
     var code = makeCode(env);
     env.cache.put('rsvcode:' + key, JSON.stringify({ code: code, tries: 0 }), 900);
     env.cache.put(rk, String(n + 1), 3600);
-    var err = send(env, to, subject, lines.concat(['', '확인 번호: ' + code, '', '15분 동안 쓸 수 있어요. 직접 요청하지 않았다면 이 메일은 무시해 주세요.', '문의: ' + EVENT.phone]));
-    return err ? fail('mail', '메일을 보내지 못했어요. ' + EVENT.phone + '로 연락 주세요.') : null;
+    var err = send(env, to, subject, lines.concat(['', '확인 번호: ' + code, '', '15분 동안 쓸 수 있어요. 직접 요청하지 않았다면 이 메일은 무시해 주세요.', '예약 시스템(홈페이지) 문의: ' + EVENT.sysPhone]));
+    return err ? fail('mail', '메일을 보내지 못했어요. 예약 시스템 문의 ' + EVENT.sysPhone + '로 연락 주세요.') : null;
   }
   function checkCode(env, key, code) {
     var v = null;
@@ -416,9 +419,9 @@ var RSV = (function () {
       if (!hit) return fail('none', '이 이메일로 신청한 예약이 없어요. 예약할 때 적은 이메일이 다를 수 있어요. 아래 ‘휴대전화 번호로 찾기’를 눌러 보세요.');
     } else if (digits.length >= 9) {
       var fk = 'rsvphfail:' + digits, fails = +(env.cache.get(fk) || 0);
-      if (fails >= 5) return fail('many', '여러 번 찾지 못했어요. ' + EVENT.phone + '로 연락 주세요.');
+      if (fails >= 5) return fail('many', '여러 번 찾지 못했어요. 예약 시스템 문의 ' + EVENT.sysPhone + '로 연락 주세요.');
       hit = recs.filter(function (x) { return x.phone.replace(/\D/g, '') === digits; })[0];
-      if (!hit) { env.cache.put(fk, String(fails + 1), 3600); return fail('none', '이 번호로 신청한 예약이 없어요. 번호를 확인하시거나 ' + EVENT.phone + '로 연락 주세요.'); }
+      if (!hit) { env.cache.put(fk, String(fails + 1), 3600); return fail('none', '이 번호로 신청한 예약이 없어요. 번호를 확인하시거나 예약 시스템 문의 ' + EVENT.sysPhone + '로 연락 주세요.'); }
       email = hit.email;
       env.cache.put('rsvcodeph:' + digits, email, 900);
     } else return fail('invalid', '예약할 때 적은 이메일이나 휴대전화 번호를 넣어 주세요.');
@@ -525,7 +528,7 @@ var RSV = (function () {
     var bad = sendCode(env, 'admin', to, '[' + EVENT.org + '] 좌석 예약 관리 비밀번호 찾기 확인 번호', [
       '좌석 예약 관리 화면의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.',
       '아이디: ' + str((env.adminCred() || {}).id)]);
-    return bad || { ok: true, sentTo: maskEmail(to) };
+    return bad || { ok: true, sentTo: to.split(',').map(maskEmail).join(', ') };
   }
   function adminReset(req, env) {
     var pw = str(req.password);

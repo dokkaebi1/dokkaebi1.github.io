@@ -179,6 +179,12 @@
   }
   /* 문의 전화 링크들 (여러 번호) */
   function telLinks() { return R.EVENT.phones.map(function (p) { return '<a href="tel:' + p.replace(/-/g, '') + '">' + p + '</a>'; }).join(' · '); }
+  /* 문의 안내 전체: 공연 문의 전화 · 예약 문의 메일 · 예약 시스템 문의 */
+  function contactLinks() {
+    var E = R.EVENT;
+    return '공연 문의 ' + telLinks() + ' · 예약 문의 메일 <a href="mailto:' + E.email + '">' + E.email + '</a>'
+      + ' · 예약 시스템 문의 <a href="tel:' + E.sysPhone.replace(/-/g, '') + '">' + E.sysPhone + '</a>';
+  }
   function toSet(a) { var o = {}; (a || []).forEach(function (x) { o[x] = true; }); return o; }
 
   function legend(kind) {
@@ -261,5 +267,5 @@
   function headH() { var h = document.querySelector('.rv-header'); if (h) document.documentElement.style.setProperty('--rv-head', h.offsetHeight + 'px'); }
   headH(); window.addEventListener('resize', headH); window.addEventListener('load', headH);
 
-  window.RSVUI = { esc: esc, $: $, el: el, hall: hall, legend: legend, toast: toast, confirm: confirmBox, poll: poll, api: api, fieldErrors: fieldErrors, telLinks: telLinks };
+  window.RSVUI = { esc: esc, $: $, el: el, hall: hall, legend: legend, toast: toast, confirm: confirmBox, poll: poll, api: api, fieldErrors: fieldErrors, telLinks: telLinks, contactLinks: contactLinks };
 })();
