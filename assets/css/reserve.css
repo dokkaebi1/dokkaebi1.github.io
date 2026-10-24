@@ -1,10 +1,10 @@
 /* 극단 도깨비 · 좌석 예약 (예약 · 내 예약 · 예약 관리)
    이 파일 하나로 예약 화면을 그립니다. 홈페이지 style.css 를 바꿔도 예약 화면은 깨지지 않습니다.
-   색은 극단 도깨비 대표색(먹 · 한지 · 도깨비 주홍 · 금빛 · 쪽빛)을 그대로 씁니다.
-   좌석 색: 빈 좌석 흰색 · 고른 좌석 주홍 · 승인 대기 금빛 · 예약 완료 회색 · 내 좌석 쪽빛 · 도착 초록 */
+   색은 극단 도깨비 대표색(먹 · 한지 · 도깨비 진홍 · 금빛 · 쪽빛)을 그대로 씁니다.
+   좌석 색: 빈 좌석 흰색 · 고른 좌석 진홍 · 승인 대기 금빛 · 예약 완료 회색 · 내 좌석 쪽빛 · 도착 초록 */
 :root {
   --ink: #15110F; --ink-3: #2B231E; --paper: #F6EFE3; --line: #D9C9AE;
-  --red: #D9442A; --red-btn: #C23B21; --red-d: #B8351C; --gold: #E8B04A; --jjok: #1F3B60;
+  --red: #C21C31; --red-btn: #B21A2D; --red-d: #A01729; --gold: #E8B04A; --jjok: #1F3B60;
   --text: #2B231D; --text-soft: #5E5146; --on-ink: #F1E8DA; --on-ink-soft: #B9AB99;
   --display: "Hahmlet", "Noto Serif KR", "AppleMyungjo", serif; --display-w: 800;
   --sans: "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
@@ -56,7 +56,7 @@ html { -webkit-text-size-adjust: 100%; }
 .rv-fld { display: grid; gap: 5px; font-size: 14.5px; font-weight: 700; color: var(--ink); }
 .rv-fld .req { color: var(--red-d); }
 .rv-fld input, .rv-fld select, .rv-fld textarea { font: inherit; font-weight: 400; font-size: 16px; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: var(--text); width: 100%; }
-.rv-fld input:focus, .rv-fld textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px rgba(217, 68, 42, .15); }
+.rv-fld input:focus, .rv-fld textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px rgba(194, 28, 49, .15); }
 .rv-fld textarea { resize: vertical; line-height: 1.6; }
 .rv-consent { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.6; color: var(--text); font-weight: 700; }
 .rv-consent input { margin-top: 3px; width: 20px; height: 20px; flex: none; accent-color: var(--red); }
@@ -111,7 +111,7 @@ html { -webkit-text-size-adjust: 100%; }
 .rv-legend li { display: inline-flex; align-items: center; gap: 6px; }
 .rv-legend .sw { width: 18px; height: 16px; border-radius: 5px; border: 1.5px solid var(--line); background: #fff; display: inline-block; }
 .rv-legend .sw.sel { background: var(--red-btn); border-color: var(--red-btn); }
-.rv-legend .sw.h { background: #FBE6DF; border: 1.5px dashed var(--red); }
+.rv-legend .sw.h { background: #FBE3E6; border: 1.5px dashed var(--red); }
 .rv-legend .sw.w { background: var(--wait); border-color: var(--wait); }
 .rv-legend .sw.t { background: var(--taken); border-color: var(--taken); }
 .rv-legend .sw.me { background: var(--jjok); border-color: var(--jjok); }
@@ -148,13 +148,13 @@ html { -webkit-text-size-adjust: 100%; }
   transition: background-color .2s, border-color .2s, transform .12s var(--ease);
 }
 .seat .r { color: var(--red-d); margin-right: .5px; }
-.seat:hover { border-color: var(--red); background: #FBE6DF; }
+.seat:hover { border-color: var(--red); background: #FBE3E6; }
 .seat:active { transform: scale(.92); }
 .seat.wh { border-color: var(--jjok); }
 .seat.wh::after { content: "♿"; position: absolute; top: -11px; right: -4px; font-size: 10px; line-height: 1; }
 .seat.sel { background: var(--red-btn); border-color: var(--red-btn); color: #fff; }
 .seat.sel .r, .seat.me .r, .seat.arr .r { color: inherit; }
-.seat.h { background: #FBE6DF; border: 1.5px dashed var(--red); color: var(--red-d); cursor: not-allowed; animation: rvHold 1.6s ease-in-out infinite; }
+.seat.h { background: #FBE3E6; border: 1.5px dashed var(--red); color: var(--red-d); cursor: not-allowed; animation: rvHold 1.6s ease-in-out infinite; }
 .seat.h .r { color: inherit; }
 @keyframes rvHold { 50% { background: #fff; } }
 .seat.w { background: var(--wait); border-color: var(--wait); color: var(--wait-ink); cursor: not-allowed; }
@@ -452,7 +452,7 @@ html { -webkit-text-size-adjust: 100%; }
 
 /* ===== 2026-10-24: 예약 오픈 · 인원 정하기 · 위치 지도 · 모바일 ===== */
 :root { --rv-head: 67px; }
-.rv-rule { margin: 8px 0 0; padding: 10px 14px; border-radius: 10px; background: #FBEDE8; border: 1px solid #EBC3B6; font-size: 15px; color: var(--ink); }
+.rv-rule { margin: 8px 0 0; padding: 10px 14px; border-radius: 10px; background: #FBEBED; border: 1px solid #EBBFC5; font-size: 15px; color: var(--ink); }
 .rv-open { margin-top: 18px; display: grid; gap: 4px; padding: 16px 18px; border-radius: var(--radius); background: var(--ink); color: var(--on-ink); }
 .rv-open > b { font-family: var(--display); font-weight: 800; font-size: 20px; color: var(--gold); }
 .rv-open span { font-size: 15.5px; }
@@ -537,11 +537,11 @@ html { -webkit-text-size-adjust: 100%; }
 .gd-n { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--red-btn); color: #fff; font-family: var(--display); font-weight: 900; font-size: 20px; }
 .gd-text h2 { font-family: var(--display); font-weight: 800; font-size: clamp(22px, 2.6vw, 28px); margin: 10px 0 10px; }
 .gd-text p { margin: 0 0 10px; font-size: 16.5px; }
-.gd-tip { background: #FBEDE8; border-radius: 10px; padding: 10px 14px; font-weight: 600; }
+.gd-tip { background: #FBEBED; border-radius: 10px; padding: 10px 14px; font-weight: 600; }
 .gd-colors { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14.5px; color: var(--text-soft); }
 .gd-colors .sw { display: inline-block; width: 18px; height: 16px; border-radius: 5px; border: 1.5px solid var(--line); background: #fff; vertical-align: -3px; margin-right: 5px; }
 .gd-colors .sw.sel { background: var(--red-btn); border-color: var(--red-btn); }
-.gd-colors .sw.h { background: #FBE6DF; border: 1.5px dashed var(--red); }
+.gd-colors .sw.h { background: #FBE3E6; border: 1.5px dashed var(--red); }
 .gd-colors .sw.w { background: var(--wait); border-color: var(--wait); }
 .gd-colors .sw.t { background: var(--taken); border-color: var(--taken); }
 .gd-colors .sw.wh { border-color: var(--jjok); }

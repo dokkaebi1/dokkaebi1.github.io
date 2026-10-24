@@ -1,16 +1,16 @@
 /* 극단 도깨비 홈페이지 스타일
-   색: 먹(무대 검정) · 한지 · 도깨비 주홍 · 조명 금빛 · 쪽빛 (2026-10 최종 로고 기준) */
+   색: 먹(무대 검정) · 한지 · 도깨비 진홍 · 조명 금빛 · 쪽빛 (2026-10-24 새 로고 기준) */
 :root {
-  /* 퍼스널 컬러 — 도깨비 주홍이 대표색, 먹·한지가 바탕, 금빛·쪽빛이 보조 */
+  /* 퍼스널 컬러 — 도깨비 진홍(로고 붓글씨 색)이 대표색, 먹·한지가 바탕, 금빛·쪽빛이 보조 */
   --ink: #15110F;
   --ink-2: #1E1815;
   --ink-3: #2B231E;
   --paper: #F6EFE3;
   --paper-2: #ECE1CF;
   --line: #D9C9AE;
-  --red: #D9442A;      /* 도깨비 주홍: 로고·큰 글씨·장식 */
-  --red-btn: #C23B21;  /* 흰 글씨를 올리는 버튼 */
-  --red-d: #B8351C;    /* 한지 위 작은 글씨·링크 */
+  --red: #C21C31;      /* 도깨비 진홍(로고 붓글씨 색): 큰 글씨·장식 */
+  --red-btn: #B21A2D;  /* 흰 글씨를 올리는 버튼 (흰 글씨 대비 6.8:1) */
+  --red-d: #A01729;    /* 한지 위 작은 글씨·링크 (한지 대비 6.9:1) */
   --gold: #E8B04A;     /* 조명 금빛: 어두운 바탕 위 강조 */
   --jjok: #1F3B60;     /* 쪽빛: 교육·학교 프로그램 */
   --text: #2B231D;
@@ -193,7 +193,7 @@ button { font: inherit; color: inherit; }
 .program h3 { font-family: var(--display); font-weight: var(--display-w); letter-spacing: -.02em; font-size: clamp(32px, 4vw, 46px); line-height: 1.15; margin: 10px 0 14px; }
 .program p { margin: 0 0 1em; color: var(--text-soft); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 18px 0 0; }
-.chips li { font-size: 14px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: rgba(217, 68, 42, .08); color: var(--red-d); }
+.chips li { font-size: 14px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: rgba(194, 28, 49, .08); color: var(--red-d); }
 @media (max-width: 860px) { .program { grid-template-columns: 1fr; } .program:nth-child(even) .program__media { order: 0; } }
 
 /* 사진첩 */
@@ -354,7 +354,7 @@ dialog::backdrop { background: rgba(10, 8, 6, .92); }
 .fld--full { grid-column: 1 / -1; }
 .fld .req { color: var(--red-d); }
 .fld input, .fld select, .fld textarea { font: inherit; font-weight: 400; font-size: 16px; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: var(--text); width: 100%; }
-.fld input:focus, .fld select:focus, .fld textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px rgba(217, 68, 42, .15); }
+.fld input:focus, .fld select:focus, .fld textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px rgba(194, 28, 49, .15); }
 .fld textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 .consent { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--text-soft); }
@@ -440,7 +440,7 @@ dialog.form-dialog .dlg-close { position: sticky; float: right; top: 8px; margin
 .has-mark { overflow: hidden; isolation: isolate; }
 .bg-mark { position: absolute; z-index: -1; right: -4vw; bottom: -3vw; width: min(560px, 66vw); height: auto; opacity: .08; pointer-events: none; }
 
-/* 제목 위 눈썹 글: 짧은 주홍 선 대신 'ㄱ' 꺾쇠 */
+/* 제목 위 눈썹 글: 짧은 빨간 선 대신 'ㄱ' 꺾쇠 */
 .eyebrow::before { width: 22px; height: 10px; background: none; border-top: 2px solid currentColor; border-right: 2px solid currentColor; transform: skewX(18deg); }
 
 /* 바닥글 */

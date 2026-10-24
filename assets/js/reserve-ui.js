@@ -87,7 +87,7 @@
       box.innerHTML = '';
       box.appendChild(cv);
       box.appendChild(el('p', 'mini-note', '<b>지금 보고 있는 곳</b><br>빨간 네모가 화면에 보이는 좌석이에요. 지도를 누르면 그곳으로 이동해요.'));
-      var COL = { '': '#FFFFFF', sel: '#C23B21', h: '#F2A08C', w: '#F6DD9E', t: '#B9AD99', b: '#B9AD99', me: '#1F3B60', arr: '#2E7D4F' };
+      var COL = { '': '#FFFFFF', sel: '#B21A2D', h: '#EFA2AC', w: '#F6DD9E', t: '#B9AD99', b: '#B9AD99', me: '#1F3B60', arr: '#2E7D4F' };
       var raf = 0;
       function rects() {   // 좌석·무대 위치 (좌석표 왼쪽 위 기준)
         var gr = g.getBoundingClientRect(), out = [];
@@ -123,9 +123,9 @@
           var x0 = Math.max(sr.left, R2.gr.left) - R2.gr.left, x1 = Math.min(sr.right, R2.gr.right) - R2.gr.left;
           var y0 = Math.max(top, R2.gr.top) - R2.gr.top, y1 = Math.min(bottom, R2.gr.bottom) - R2.gr.top;
           if (x1 > x0 && y1 > y0) {
-            c.strokeStyle = '#D9442A'; c.lineWidth = 2.5;
+            c.strokeStyle = '#C21C31'; c.lineWidth = 2.5;
             c.strokeRect(x0 * k + 1, y0 * k + 1, Math.max(4, (x1 - x0) * k - 2), Math.max(4, (y1 - y0) * k - 2));
-            c.fillStyle = 'rgba(217, 68, 42, .12)'; c.fillRect(x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k);
+            c.fillStyle = 'rgba(194, 28, 49, .12)'; c.fillRect(x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k);
           }
           cv._k = k;
         });
