@@ -33,12 +33,13 @@ html { -webkit-text-size-adjust: 100%; }
 .rv-header { position: sticky; top: 0; z-index: 50; background: var(--ink); color: var(--on-ink); border-bottom: 3px solid var(--red); }
 .rv-header-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; }
 .rv-brand { color: var(--on-ink) !important; text-decoration: none; font-family: var(--display); font-weight: 900; font-size: 24px; letter-spacing: -.02em; white-space: nowrap; }
-.rv-brand small { font-family: var(--sans); font-weight: 700; font-size: 13px; color: var(--on-ink-soft); margin-right: 2px; }
+.rv-brand { display: block; line-height: 0; flex: none; }
+.rv-brand img { display: block; height: 38px; width: auto; }
 .rv-nav { display: flex; gap: 2px; overflow-x: auto; }
 .rv-nav a { color: var(--on-ink) !important; text-decoration: none; font-weight: 700; font-size: 15px; padding: 8px 12px; border-radius: 999px; white-space: nowrap; }
 .rv-nav a:hover { background: var(--ink-3); }
 .rv-nav a[aria-current="page"] { background: var(--red-btn); color: #fff !important; }
-@media (max-width: 640px) { .rv-nav a:last-child { display: none; } .rv-nav a { padding: 7px 10px; font-size: 14px; } .rv-brand { font-size: 20px; } }
+@media (max-width: 640px) { .rv-nav a:last-child { display: none; } .rv-nav a { padding: 7px 10px; font-size: 14px; } .rv-brand img { height: 30px; } }
 .rv-footer { background: var(--ink); color: var(--on-ink-soft); font-size: 14px; padding: 28px 0 calc(110px + env(safe-area-inset-bottom, 0px)); line-height: 1.9; }
 .rv-footer b { color: var(--on-ink); }
 .rv-footer a { color: var(--on-ink) !important; }
