@@ -13,7 +13,8 @@ var RSV = (function () {
     genre: '아동극 · 생활습관 교육극',
     venue: '안데르센극장',
     address: '부산광역시 기장군 장안읍 장안로 211',
-    org: '극단 도깨비',
+    org: '극단 도깨비',                // 주관
+    host: '기장군',                    // 주최
     phones: ['010-5115-5406', '010-3837-8479'],   // 안내문의 문의 번호 순서
     phone: '010-5115-5406, 010-3837-8479',
     audience: '4세 이상 · 무료 관람',
@@ -256,6 +257,7 @@ var RSV = (function () {
   function ticketLines(x) {
     return [
       '공연: ' + EVENT.series + ' 〈' + EVENT.title + '〉',
+      '주최: ' + EVENT.host + ' · 주관: ' + EVENT.org,
       '일시: ' + showLabel(x.show),
       '장소: ' + EVENT.venue + ' (' + EVENT.address + ')',
       '좌석: ' + x.seats.map(seatName).join(', ') + ' (' + x.seats.length + '석)',
