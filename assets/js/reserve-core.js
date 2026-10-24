@@ -291,6 +291,18 @@ var RSV = (function () {
       ''
     ], contactLines()));
   }
+  /* 신청 바로 뒤 손님에게: 신청을 받았고 승인 대기라는 안내 */
+  function mailReceived(env, x) {
+    return send(env, x.email, '[' + EVENT.org + '] 좌석 예약 신청을 받았습니다 (승인 대기) · ' + showLabel(x.show) + ' · ' + x.seats.length + '석', [
+      x.name + '님, 좌석 예약 신청을 받았습니다. 아직 확정 전(승인 대기)입니다.', ''
+    ].concat(ticketLines(x), [
+      '',
+      '담당자가 확인한 뒤 이 메일 주소로 예약 확정 메일을 다시 보내 드립니다. 확정 전까지 좌석은 ‘승인 대기’로 잡혀 있습니다.',
+      '신청 상태는 아래 ‘내 예약 확인’에서 예약할 때 쓴 이메일과 비밀번호로 언제든 볼 수 있습니다.',
+      siteUrl(env) + '/reserve/my.html',
+      ''
+    ], contactLines()));
+  }
   function mailReject(env, x, reason) {
     return send(env, x.email, '[' + EVENT.org + '] 좌석 예약 안내 · ' + showLabel(x.show), [
       x.name + '님, 신청하신 좌석 예약을 이번에는 확정하지 못했습니다.', ''
@@ -358,6 +370,7 @@ var RSV = (function () {
     env.cache.put(rl, String(n + 1), 3600);
     var rec = out.rec; delete out.rec;
     mailAdmin(env, '[좌석 예약 신청] ' + showLabel(rec.show) + ' · ' + rec.name + ' · ' + rec.seats.length + '석', rec, '새 좌석 예약 신청이 들어왔습니다. (승인 대기)');
+    out.mailed = !mailReceived(env, rec);
     return out;
   }
 
