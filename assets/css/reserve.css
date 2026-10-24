@@ -448,3 +448,108 @@ html { -webkit-text-size-adjust: 100%; }
 
 /* 당일 입장 탭의 도착 시험 모드 줄 */
 .ad-testbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 0 0 14px; }
+
+/* ===== 2026-10-24: 예약 오픈 · 인원 정하기 · 위치 지도 · 모바일 ===== */
+:root { --rv-head: 67px; }
+.rv-rule { margin: 8px 0 0; padding: 10px 14px; border-radius: 10px; background: #FBEDE8; border: 1px solid #EBC3B6; font-size: 15px; color: var(--ink); }
+.rv-open { margin-top: 18px; display: grid; gap: 4px; padding: 16px 18px; border-radius: var(--radius); background: var(--ink); color: var(--on-ink); }
+.rv-open > b { font-family: var(--display); font-weight: 800; font-size: 20px; color: var(--gold); }
+.rv-open span { font-size: 15.5px; }
+.rv-open span b { color: #fff; font-variant-numeric: tabular-nums; }
+.rv-open .rv-sub { color: var(--on-ink-soft); margin: 0; font-size: 14px; }
+.rv-body .rv-open a { color: var(--gold); }
+.rv-notyet .rv-show[aria-pressed="true"] .left { color: var(--on-ink-soft); }
+
+.rv-party { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+.rv-stepper { display: flex; align-items: center; gap: 8px; }
+.rv-stepper button { width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--ink); background: #fff; font-size: 26px; font-weight: 700; line-height: 1; cursor: pointer; color: var(--ink); }
+.rv-stepper label { display: flex; align-items: baseline; gap: 4px; }
+.rv-stepper input { width: 88px; height: 52px; text-align: center; font: 800 26px/1 var(--sans); border: 1.5px solid var(--line); border-radius: 12px; color: var(--ink); -moz-appearance: textfield; }
+.rv-stepper input::-webkit-outer-spin-button, .rv-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.rv-stepper span { font-weight: 800; font-size: 18px; }
+.rv-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.rv-quick button { font: inherit; font-weight: 700; font-size: 14.5px; padding: 7px 13px; border-radius: 999px; border: 1.5px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
+.rv-quick button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.rv-quick button[hidden] { display: none; }
+.rv-auto { display: flex; gap: 8px; align-items: flex-start; font-size: 14.5px; font-weight: 600; color: var(--text); }
+.rv-auto input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--red); flex: none; }
+.rv-btn-wait { background: var(--ink-3); }
+
+/* 위치 지도: 좌석표가 화면보다 넓을 때만 보임, 머리글 아래에 붙어 따라옴 */
+.rv-mini { position: sticky; top: var(--rv-head); z-index: 20; display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin: 0 8px 6px; border-radius: 12px; background: rgba(255, 253, 248, .97); border: 1px solid var(--line); box-shadow: 0 8px 18px -12px rgba(21, 17, 15, .45); }
+.rv-mini[hidden] { display: none; }
+.rv-mini canvas { flex: none; border-radius: 6px; cursor: pointer; display: block; }
+.mini-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-soft); }
+.mini-note b { color: var(--red-d); font-size: 13.5px; }
+
+.rv-rules { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 16px; }
+
+/* 모바일: 옆으로 밀거나 잘리는 곳 없애기 */
+@media (max-width: 640px) {
+  .rv-header-in { flex-wrap: wrap; padding: 8px 0; min-height: 0; gap: 6px; }
+  .rv-nav { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; overflow: visible; }
+  .rv-nav a { text-align: center; padding: 7px 4px; font-size: 13.5px; white-space: normal; line-height: 1.25; }
+  .rv-nav a:last-child { display: none; }
+  .pf-toc { position: static; }
+  .pf-toc .rv-wrap { flex-wrap: wrap; overflow: visible; gap: 6px; }
+  .pf-toc a { background: var(--card); border: 1px solid var(--line); font-size: 14px; padding: 6px 12px; }
+  .rv-h2 { font-size: 24px; }
+  .rv-stepper button { width: 44px; height: 44px; }
+  .rv-quick button { padding: 6px 11px; font-size: 14px; }
+  .rv-boardhead { flex-direction: column; align-items: flex-start; }
+  .rv-legend { gap: 4px 10px; font-size: 13px; }
+  .rv-scroll { padding: 10px 8px 8px; }
+  .ad-tabs { overflow: visible; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
+  .ad-tabs button { padding: 10px 4px; font-size: 14px; white-space: normal; }
+  .ad-search { min-width: 0; width: 100%; max-width: none; }
+  .ad-chip { padding: 8px 10px; }
+  .ad-seats b { font-size: 16px; }
+  .rv-bar .picked b { font-size: 14.5px; }
+  .rv-bar .rv-btn { padding: 12px 16px; font-size: 15px; }
+  .rv-dlg { width: calc(100% - 16px); }
+  .rv-dlg .body { padding: 16px; }
+}
+/* 공연 안내: 예약 오픈·홈페이지 예약만 안내 */
+.pf-notice { margin: 4px 0 22px; padding: 16px 18px; border-radius: var(--radius); background: rgba(232, 176, 74, .12); border: 1.5px solid var(--gold); }
+.pf-notice ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 15.5px; color: var(--on-ink); }
+.pf-notice b { color: #fff; }
+.rv-body .pf-notice a, .rv-body .pf-notice a b { color: var(--gold); }
+.pf-open { margin: 0; font-family: var(--display); font-weight: 800; font-size: 20px; color: var(--gold); }
+.pf-open b { color: #fff; }
+.pf-sec .pf-open { color: var(--red-d); font-size: 18px; }
+.pf-sec .pf-open b { color: var(--ink); }
+.pf-bar .acts { gap: 6px; }
+.rv-body .pf-bar a.rv-btn-line { color: var(--on-ink); }
+@media (max-width: 520px) { .pf-bar .rv-btn-line { display: inline-flex; } .pf-bar .picked span { display: none; } .pf-bar .rv-btn { padding: 11px 14px; font-size: 14.5px; } .pf-cta .rv-btn { width: 100%; justify-content: center; } }
+
+/* 예약 방법 (guide.html) */
+.gd-head h1 { font-family: var(--display); font-weight: 900; font-size: clamp(32px, 5vw, 52px); letter-spacing: -.02em; margin: 8px 0 6px; }
+.gd-key { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.gd-key > div { background: var(--ink); color: var(--on-ink); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 2px; }
+.gd-key small { color: var(--on-ink-soft); font-weight: 700; }
+.gd-key b { font-family: var(--display); font-weight: 800; font-size: 20px; color: var(--gold); line-height: 1.3; }
+.gd-key span { font-size: 13.5px; color: var(--on-ink-soft); }
+.gd-steps { display: grid; gap: 22px; margin-top: 30px; }
+.gd-step { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 28px; align-items: start; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.gd-step figure { margin: 0; border-radius: 22px; overflow: hidden; border: 6px solid var(--ink); box-shadow: 0 18px 36px -24px rgba(21, 17, 15, .6); background: #fff; }
+.gd-step img { display: block; width: 100%; height: auto; }
+.gd-n { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--red-btn); color: #fff; font-family: var(--display); font-weight: 900; font-size: 20px; }
+.gd-text h2 { font-family: var(--display); font-weight: 800; font-size: clamp(22px, 2.6vw, 28px); margin: 10px 0 10px; }
+.gd-text p { margin: 0 0 10px; font-size: 16.5px; }
+.gd-tip { background: #FBEDE8; border-radius: 10px; padding: 10px 14px; font-weight: 600; }
+.gd-colors { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14.5px; color: var(--text-soft); }
+.gd-colors .sw { display: inline-block; width: 18px; height: 16px; border-radius: 5px; border: 1.5px solid var(--line); background: #fff; vertical-align: -3px; margin-right: 5px; }
+.gd-colors .sw.sel { background: var(--red-btn); border-color: var(--red-btn); }
+.gd-colors .sw.h { background: #FBE6DF; border: 1.5px dashed var(--red); }
+.gd-colors .sw.w { background: var(--wait); border-color: var(--wait); }
+.gd-colors .sw.t { background: var(--taken); border-color: var(--taken); }
+.gd-colors .sw.wh { border-color: var(--jjok); }
+.gd-faq dl { margin: 0; display: grid; gap: 10px; }
+.gd-faq dl > div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.gd-faq dt { font-weight: 800; color: var(--ink); margin-bottom: 4px; }
+.gd-faq dd { margin: 0; color: var(--text); }
+@media (max-width: 760px) {
+  .gd-key { grid-template-columns: 1fr 1fr; }
+  .gd-step { grid-template-columns: 1fr; padding: 16px; gap: 14px; }
+  .gd-step figure { max-width: 250px; margin: 0 auto; border-width: 5px; }
+}

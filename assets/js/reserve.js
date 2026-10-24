@@ -1,8 +1,10 @@
-/* 좌석 예약 화면: 회차 고르기 → 좌석 고르기(실시간) → 예약 신청 */
+/* 좌석 예약 화면: 회차 고르기 → 인원 정하기 → 좌석 고르기(실시간) → 예약 신청
+   - 예약 오픈 전(기본 11월 4일 오전 10시)에는 좌석표만 보여 주고 남은 시간을 셉니다
+   - 인원을 먼저 정하면 좌석 하나를 눌렀을 때 붙어 있는 빈 좌석을 인원만큼 자동으로 고릅니다 */
 (function () {
   'use strict';
   var R = window.RSV, U = window.RSVUI, esc = U.esc;
-  var S = { data: null, show: null, sel: [], t0: Date.now(), map: null, busy: false, holds: {}, syncing: false, again: false, timer: null, deadline: null, warned: false };
+  var S = { data: null, show: null, sel: [], need: 1, auto: true, t0: Date.now(), map: null, busy: false, holds: {}, syncing: false, again: false, timer: null, deadline: null, warned: false, centered: false };
   var POLL_MS = 5000, HOLD_MS = (R.HOLD_SEC || 300) * 1000;
   /* 이 화면(브라우저 탭)의 이름표: 내가 고른 좌석을 다른 분 화면에 '예약 중'으로 보여 주는 데 씁니다 */
   var HOLDER = (function () {
@@ -17,9 +19,13 @@
   })();
 
   var showsBox = U.$('#rv-shows'), board = U.$('#rv-hall'), live = U.$('#rv-live'), bar = U.$('.rv-bar'), dlg = U.$('#rv-dlg');
+  var openBox = U.$('#rv-open'), party = U.$('#rv-party'), nInput = U.$('#rv-n'), autoBox = U.$('#rv-auto');
   U.$('#rv-legend').innerHTML = U.legend('public');
+  S.map = U.hall(board, { onPick: pick, minimap: U.$('#rv-mini') });
 
-  S.map = U.hall(board, { onPick: pick });
+  function maxN() { return (S.data && S.data.max) || 100; }
+  function notYet() { return !!(S.data && S.data.notYet) && Date.now() < openMs(); }
+  function openMs() { return S.data && S.data.openAt ? Date.parse(S.data.openAt.replace(' ', 'T') + ':00+09:00') : 0; }
 
   /* 예약된 좌석 + 다른 분이 지금 고르고 있는 좌석('h') */
   function occ() {
@@ -48,7 +54,7 @@
         }
         S.map.update({ occ: occ(), sel: S.sel });
         renderBar();
-      } else if (r.code === 'closed') U.toast(r.message, true);
+      } else if (r.code === 'closed' || r.code === 'notyet') { U.toast(r.message, true); S.sel = []; render(); }
       if (S.again) { S.again = false; syncHold(); }
     });
   }
@@ -84,23 +90,98 @@
       }
       if (!S.sel.length) S.deadline = null;
       render();
+      if (!S.centered) { S.centered = true; S.map.center(); }
     });
   }
 
   function render() {
-    var d = S.data;
+    var d = S.data, wait = notYet();
     showsBox.innerHTML = d.shows.map(function (s) {
       var p = R.dateLabel(s.date);
-      var left = s.closed ? '예약 마감' : !d.open ? '예약 중단' : s.left ? '남은 좌석 ' + s.left + '석' : '매진';
+      var left = s.closed ? '예약 마감' : wait ? '빈 좌석 ' + s.left + '석' : !d.open ? '예약 중단' : s.left ? '남은 좌석 ' + s.left + '석' : '매진';
       return '<button type="button" class="rv-show" data-show="' + s.id + '" aria-pressed="' + (s.id === S.show) + '"' + (s.closed ? ' disabled' : '') + '>'
         + '<span class="d">' + esc(p) + '</span><span class="t">' + esc(R.timeLabel(s.time)) + ' 공연</span>'
         + '<span class="left">' + left + '</span></button>';
     }).join('');
+    renderParty();
+    renderOpen();
     S.map.update({ occ: occ(), sel: S.sel });
     renderBar();
   }
 
-  /* 남은 시간: 1초마다 표시, 1분 남으면 알림, 0이 되면 고른 좌석을 비움 */
+  /* ---------- 예약 오픈 전 안내 (남은 시간) ---------- */
+  function renderOpen() {
+    if (!openBox || !S.data) return;
+    var wait = notYet();
+    openBox.hidden = !wait;
+    document.body.classList.toggle('rv-notyet', wait);
+    if (!wait) return;
+    var ms = openMs() - Date.now(), d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4), s = Math.floor(ms % 6e4 / 1e3);
+    U.$('[data-open-at]', openBox).textContent = S.data.openAtLabel;
+    U.$('[data-open-left]', openBox).textContent = d > 0 ? d + '일 ' + h + '시간 ' + m + '분' : h + '시간 ' + m + '분 ' + s + '초';
+  }
+  setInterval(function () {
+    if (!S.data || !S.data.notYet) return;
+    if (Date.now() >= openMs()) { S.data.notYet = false; load(); } else renderOpen();
+  }, 1000);
+
+  /* ---------- 인원 정하기 ---------- */
+  function setNeed(n) {
+    n = Math.max(1, Math.min(maxN(), parseInt(n, 10) || 1));
+    S.need = n;
+    if (S.sel.length > n) {
+      var drop = S.sel.slice(n);
+      S.sel = S.sel.slice(0, n);
+      U.toast('인원을 ' + n + '명으로 줄여서 ' + drop.join(', ') + ' 좌석을 뺐어요.');
+      S.map.update({ occ: occ(), sel: S.sel });
+      holdSoon();
+    }
+    renderParty();
+    renderBar();
+  }
+  function renderParty() {
+    if (!party) return;
+    nInput.max = maxN();
+    if (document.activeElement !== nInput) nInput.value = S.need;
+    party.querySelectorAll('[data-set]').forEach(function (b) {
+      b.hidden = +b.dataset.set > maxN();
+      b.setAttribute('aria-pressed', String(+b.dataset.set === S.need));
+    });
+    document.querySelectorAll('[data-max]').forEach(function (b) { b.textContent = maxN(); });
+    autoBox.closest('label').hidden = S.need < 2;
+  }
+  party.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.set) setNeed(b.dataset.set);
+    if (b.dataset.step) setNeed(S.need + +b.dataset.step);
+  });
+  nInput.addEventListener('change', function () { setNeed(nInput.value); });
+  nInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); setNeed(nInput.value); nInput.blur(); } });
+  autoBox.addEventListener('change', function () { S.auto = autoBox.checked; });
+
+  /* 누른 좌석부터 붙어 있는 빈 좌석 고르기: 같은 줄에서 가까운 순 → 뒷줄 → 앞줄 (휠체어석은 직접 누를 때만) */
+  function autoFill(start, count) {
+    var o = occ(), chosen = {}, out = [];
+    S.sel.forEach(function (x) { chosen[x] = true; });
+    var r0 = start.charAt(0), n0 = +start.slice(1), side = R.SIDES[r0];
+    var rows = side ? [r0] : [r0];
+    if (!side) {
+      var i0 = R.ROWS.indexOf(r0);
+      for (var i = i0 + 1; i < R.ROWS.length; i++) rows.push(R.ROWS[i]);
+      for (var j = i0 - 1; j >= 0; j--) rows.push(R.ROWS[j]);
+    }
+    function ok(id) { return !o[id] && !chosen[id] && (id === start || R.WHEEL.indexOf(id) < 0); }
+    rows.forEach(function (r) {
+      if (out.length >= count) return;
+      R.rowNums(r).slice().sort(function (a, b) { var d = Math.abs(a - n0) - Math.abs(b - n0); return d || b - a; }).forEach(function (n) {
+        var id = r + n;
+        if (out.length < count && ok(id)) { out.push(id); chosen[id] = true; }
+      });
+    });
+    return out;
+  }
+
+  /* ---------- 남은 시간: 1초마다 표시, 1분 남으면 알림, 0이 되면 고른 좌석을 비움 ---------- */
   function clock(ms) { var s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
   function tick() {
     var els = document.querySelectorAll('[data-timer]');
@@ -124,8 +205,12 @@
     var n = S.sel.length;
     if (!n) { S.deadline = null; S.warned = false; }
     bar.classList.toggle('show', n > 0);
-    U.$('.picked b', bar).textContent = n ? R.dateLabel(S.show) + ' · ' + n + '석 선택' : '';
+    U.$('.picked b', bar).textContent = n ? R.dateLabel(S.show) + ' · ' + S.need + '명 중 ' + n + '석 고름' : '';
     U.$('.picked span', bar).textContent = S.sel.join(' · ');
+    var apply = U.$('[data-apply]', bar);
+    apply.textContent = n < S.need ? (S.need - n) + '석 더 골라 주세요' : '예약 신청';
+    apply.classList.toggle('rv-btn-wait', n < S.need);
+    S.map.redraw();
   }
 
   showsBox.addEventListener('click', function (e) {
@@ -138,17 +223,21 @@
 
   function pick(id) {
     if (!S.data) return;
+    if (notYet()) { U.toast('좌석 예약은 ' + S.data.openAtLabel + '에 열려요. 지금은 좌석만 미리 볼 수 있어요.', true); return; }
     var info = showInfo(S.show);
-    if (!info.open) { U.toast(info.closed ? '이 회차는 예약이 끝났어요.' : '지금은 온라인 예약을 받지 않아요. ' + R.EVENT.phone + '로 문의해 주세요.', true); return; }
+    if (!info.open) { U.toast(info.closed ? '이 회차는 예약이 끝났어요.' : '지금은 예약을 받지 않아요.', true); return; }
     var i = S.sel.indexOf(id);
     if (i >= 0) S.sel.splice(i, 1);
     else {
       var code = occ()[id];
       if (code) { U.toast(code === 'h' ? '다른 분이 지금 이 좌석을 예약하고 있어요. 잠시 뒤에 다시 확인해 주세요.' : code === 'w' ? '다른 분이 신청해서 승인 대기 중인 좌석이에요.' : '이미 예약된 좌석이에요.'); return; }
-      if (S.sel.length >= S.data.max) { U.toast('한 번에 ' + S.data.max + '석까지 고를 수 있어요. 단체는 ' + R.EVENT.phone + '로 문의해 주세요.', true); return; }
+      var room = S.need - S.sel.length;
+      if (room <= 0) { U.toast('인원 ' + S.need + '명만큼 다 골랐어요. 바꾸려면 고른 좌석을 눌러 빼거나 위에서 인원을 바꿔 주세요.', true); return; }
+      var picks = S.auto && room > 1 ? autoFill(id, room) : [id];
+      if (picks.length < room && S.auto && room > 1) U.toast('붙어 있는 빈 좌석이 모자라 ' + picks.length + '석만 골랐어요. 나머지 ' + (room - picks.length) + '석은 직접 눌러 주세요.', true);
       if (!S.sel.length) { S.deadline = Date.now() + HOLD_MS; S.warned = false; }   // 서버 답이 오면 맞춤
-      S.sel.push(id);
-      S.sel.sort(R.seatSort);
+      S.sel = S.sel.concat(picks).sort(R.seatSort);
+      if (picks.length > 1) S.map.flash(picks);
       if (R.WHEEL.indexOf(id) >= 0) U.toast('휠체어석이에요. 휠체어를 이용하는 관객만 골라 주세요.');
     }
     S.map.update({ occ: occ(), sel: S.sel });
@@ -158,7 +247,10 @@
   }
 
   U.$('[data-clear]', bar).addEventListener('click', function () { S.sel = []; render(); holdSoon(); });
-  U.$('[data-apply]', bar).addEventListener('click', openForm);
+  U.$('[data-apply]', bar).addEventListener('click', function () {
+    if (S.sel.length < S.need) { U.toast('인원 ' + S.need + '명 중 ' + S.sel.length + '석만 골랐어요. ' + (S.need - S.sel.length) + '석을 더 고르거나 위에서 인원을 줄여 주세요.', true); return; }
+    openForm();
+  });
 
   /* ---------- 예약 신청 ---------- */
   var form = U.$('form', dlg);
@@ -168,7 +260,7 @@
   }
   function openForm() {
     if (!S.sel.length) return;
-    U.$('[data-pick]', dlg).innerHTML = '<b>' + esc(R.showLabel(S.show)) + '</b><span class="seats">' + esc(S.sel.map(R.seatName).join(', ')) + ' · ' + S.sel.length + '석</span>'
+    U.$('[data-pick]', dlg).innerHTML = '<b>' + esc(R.showLabel(S.show)) + '</b><span class="seats">' + S.sel.length + '명 · ' + esc(S.sel.join(', ')) + '</span>'
       + '<span class="rv-timer" data-timer hidden></span><small>좌석을 처음 고른 때부터 5분 안에 신청해 주세요. 시간이 지나면 좌석이 풀려요.</small>';
     tick();
     panes(false);
@@ -202,7 +294,7 @@
       if (r.ok) {
         panes(true);
         U.$('[data-no]', dlg).textContent = r.id;
-        U.$('[data-what]', dlg).textContent = r.showLabel + ' · ' + r.seats.map(R.seatName).join(', ') + ' (' + r.seats.length + '석)';
+        U.$('[data-what]', dlg).textContent = r.showLabel + ' · ' + r.seats.length + '명 · ' + r.seats.join(', ');
         U.$('[data-mail]', dlg).textContent = f.email.value.trim();
         form.reset();
         form.querySelectorAll('input[name^="password"]').forEach(function (i) { i.type = 'password'; });

@@ -72,7 +72,88 @@
           if (!opts.admin) b.setAttribute('aria-disabled', code && !sel[id] ? 'true' : 'false');
         }
       });
+      last = view;
+      if (mini) mini.draw();
     }
+    var last = {};
+
+    /* 위치 지도: 좌석표가 화면보다 넓을 때(휴대폰) 극장 전체를 작게 보여 주고,
+       지금 화면에 보이는 부분을 빨간 네모로 표시. 누르면 그곳으로 이동 */
+    var mini = opts.minimap ? minimap(opts.minimap) : null;
+    function minimap(box) {
+      var cv = el('canvas', 'mini-cv'), sc = host.closest('.rv-scroll');
+      cv.setAttribute('role', 'img');
+      cv.setAttribute('aria-label', '극장 전체 좌석 위치 지도. 빨간 네모가 지금 보고 있는 부분이에요');
+      box.innerHTML = '';
+      box.appendChild(cv);
+      box.appendChild(el('p', 'mini-note', '<b>지금 보고 있는 곳</b><br>빨간 네모가 화면에 보이는 좌석이에요. 지도를 누르면 그곳으로 이동해요.'));
+      var COL = { '': '#FFFFFF', sel: '#C23B21', h: '#F2A08C', w: '#F6DD9E', t: '#B9AD99', b: '#B9AD99', me: '#1F3B60', arr: '#2E7D4F' };
+      var raf = 0;
+      function rects() {   // 좌석·무대 위치 (좌석표 왼쪽 위 기준)
+        var gr = g.getBoundingClientRect(), out = [];
+        Object.keys(seats).forEach(function (id) { var r = seats[id].getBoundingClientRect(); out.push([id, r.left - gr.left, r.top - gr.top, r.width, r.height]); });
+        var st = g.querySelector('.stage').getBoundingClientRect();
+        return { gr: gr, seats: out, stage: [st.left - gr.left, st.top - gr.top, st.width, st.height] };
+      }
+      function draw() {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(function () {
+          var need = sc && g.scrollWidth > sc.clientWidth + 4;
+          box.hidden = !need;
+          if (!need) return;
+          var R2 = rects(), W = g.scrollWidth, H = g.scrollHeight;
+          var maxW = Math.min(170, box.clientWidth * 0.5), k = Math.min(maxW / W, 120 / H), dpr = window.devicePixelRatio || 1;
+          var cw = Math.round(W * k), ch = Math.round(H * k);
+          cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+          cv.width = cw * dpr; cv.height = ch * dpr;
+          var c = cv.getContext('2d');
+          c.setTransform(dpr, 0, 0, dpr, 0, 0);
+          c.fillStyle = '#F6EFE3'; c.fillRect(0, 0, cw, ch);
+          c.fillStyle = '#15110F'; c.fillRect(R2.stage[0] * k, R2.stage[1] * k, R2.stage[2] * k, R2.stage[3] * k);
+          var occ = last.occ || {}, sel = toSet(last.sel), me = toSet(last.me), arr = toSet(last.arr);
+          R2.seats.forEach(function (s) {
+            var id = s[0], code = me[id] ? 'me' : arr[id] ? 'arr' : sel[id] ? 'sel' : (occ[id] || '');
+            c.fillStyle = COL[code] || COL[''];
+            c.fillRect(s[1] * k, s[2] * k, Math.max(1.5, s[3] * k), Math.max(1.5, s[4] * k));
+            if (!code) { c.strokeStyle = '#CDBFA6'; c.lineWidth = .5; c.strokeRect(s[1] * k, s[2] * k, Math.max(1.5, s[3] * k), Math.max(1.5, s[4] * k)); }
+          });
+          // 지금 보이는 부분 = 가로: 스크롤 상자 / 세로: 화면에서 머리글·위치 지도·아래 바를 뺀 곳
+          var sr = sc.getBoundingClientRect(), top = box.getBoundingClientRect().bottom, bar = document.querySelector('.rv-bar.show');
+          var bottom = Math.min(window.innerHeight - (bar ? bar.offsetHeight : 0), sr.bottom);
+          var x0 = Math.max(sr.left, R2.gr.left) - R2.gr.left, x1 = Math.min(sr.right, R2.gr.right) - R2.gr.left;
+          var y0 = Math.max(top, R2.gr.top) - R2.gr.top, y1 = Math.min(bottom, R2.gr.bottom) - R2.gr.top;
+          if (x1 > x0 && y1 > y0) {
+            c.strokeStyle = '#D9442A'; c.lineWidth = 2.5;
+            c.strokeRect(x0 * k + 1, y0 * k + 1, Math.max(4, (x1 - x0) * k - 2), Math.max(4, (y1 - y0) * k - 2));
+            c.fillStyle = 'rgba(217, 68, 42, .12)'; c.fillRect(x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k);
+          }
+          cv._k = k;
+        });
+      }
+      cv.addEventListener('click', function (e) {
+        var k = cv._k; if (!k) return;
+        var r = cv.getBoundingClientRect(), hx = (e.clientX - r.left) / k, hy = (e.clientY - r.top) / k;
+        sc.scrollTo({ left: hx - sc.clientWidth / 2, behavior: 'smooth' });
+        var gr = g.getBoundingClientRect(), mid = (box.getBoundingClientRect().bottom + window.innerHeight) / 2;
+        window.scrollBy({ top: gr.top + hy - mid, behavior: 'smooth' });
+      });
+      if (sc) sc.addEventListener('scroll', draw, { passive: true });
+      window.addEventListener('scroll', draw, { passive: true });
+      window.addEventListener('resize', draw);
+      // 글꼴·좌석표 크기가 늦게 정해져도 다시 그리기
+      if (window.ResizeObserver && sc) new ResizeObserver(draw).observe(g);
+      window.addEventListener('load', draw);
+      return { draw: draw };
+    }
+    /* 처음에는 좌석표 가운데(무대 정면)가 보이게 */
+    var wantCenter = false;
+    function center() {
+      var sc = host.closest('.rv-scroll');
+      if (!sc || !sc.clientWidth || g.scrollWidth <= sc.clientWidth) { wantCenter = true; return; }   // 아직 크기가 안 정해졌으면 정해질 때 맞춤
+      wantCenter = false;
+      sc.scrollLeft = (sc.scrollWidth - sc.clientWidth) / 2;
+    }
+    if (window.ResizeObserver) new ResizeObserver(function () { if (wantCenter) center(); }).observe(g);
     function flash(ids) {
       (ids || []).forEach(function (id) {
         var b = seats[id]; if (!b) return;
@@ -86,8 +167,18 @@
       var r = b.getBoundingClientRect(), s = sc.getBoundingClientRect();
       sc.scrollLeft += (r.left + r.width / 2) - (s.left + s.width / 2);
     }
-    return { update: update, flash: flash, seats: seats, scrollTo: scrollTo };
+    /* 읽기 전용 작은 좌석표: 상자 너비에 맞춰 통째로 줄여 보여 줌 (옆으로 밀 필요 없게) */
+    function fit() {
+      var box = host.parentElement; if (!box) return;
+      g.style.transform = ''; g.style.transformOrigin = 'top left'; box.style.height = ''; box.style.overflow = 'hidden';
+      var w = g.scrollWidth, avail = box.clientWidth;
+      if (w > avail) { var k = avail / w; g.style.transform = 'scale(' + k + ')'; box.style.height = Math.ceil(g.scrollHeight * k) + 'px'; }
+    }
+    if (opts.fit) { requestAnimationFrame(fit); window.addEventListener('resize', fit); }
+    return { update: update, flash: flash, seats: seats, scrollTo: scrollTo, center: center, redraw: function () { if (mini) mini.draw(); } };
   }
+  /* 문의 전화 링크들 (여러 번호) */
+  function telLinks() { return R.EVENT.phones.map(function (p) { return '<a href="tel:' + p.replace(/-/g, '') + '">' + p + '</a>'; }).join(' · '); }
   function toSet(a) { var o = {}; (a || []).forEach(function (x) { o[x] = true; }); return o; }
 
   function legend(kind) {
@@ -166,5 +257,9 @@
     if (first) first.focus();
   }
 
-  window.RSVUI = { esc: esc, $: $, el: el, hall: hall, legend: legend, toast: toast, confirm: confirmBox, poll: poll, api: api, fieldErrors: fieldErrors };
+  /* 머리글 높이를 CSS 변수로 (위치 지도·차례가 머리글 바로 아래에 붙도록) */
+  function headH() { var h = document.querySelector('.rv-header'); if (h) document.documentElement.style.setProperty('--rv-head', h.offsetHeight + 'px'); }
+  headH(); window.addEventListener('resize', headH); window.addEventListener('load', headH);
+
+  window.RSVUI = { esc: esc, $: $, el: el, hall: hall, legend: legend, toast: toast, confirm: confirmBox, poll: poll, api: api, fieldErrors: fieldErrors, telLinks: telLinks };
 })();

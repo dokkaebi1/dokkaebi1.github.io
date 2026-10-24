@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>좌석 예약 | 배탈난 호랑이 · 안데르센극장 | 극단 도깨비</title>
-<meta name="description" content="〈배탈난 호랑이〉 11월 24~26일 오전 10시 30분 안데르센극장 좌석을 직접 골라 예약 신청하세요. 문의 010-3837-8479">
+<meta name="description" content="〈배탈난 호랑이〉 11월 24~26일 오전 10시 30분 안데르센극장 좌석을 직접 골라 예약 신청하세요. 문의 010-5115-5406, 010-3837-8479">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://dokkaebi1.github.io/reserve/seats.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="극단 도깨비">
 <meta property="og:locale" content="ko_KR">
 <meta property="og:title" content="좌석 예약 | 배탈난 호랑이 · 안데르센극장 | 극단 도깨비">
-<meta property="og:description" content="〈배탈난 호랑이〉 11월 24~26일 오전 10시 30분 안데르센극장 좌석을 직접 골라 예약 신청하세요. 문의 010-3837-8479">
+<meta property="og:description" content="〈배탈난 호랑이〉 11월 24~26일 오전 10시 30분 안데르센극장 좌석을 직접 골라 예약 신청하세요. 문의 010-5115-5406, 010-3837-8479">
 <meta property="og:url" content="https://dokkaebi1.github.io/reserve/seats.html">
 <meta property="og:image" content="https://dokkaebi1.github.io/assets/img/reserve-poster-og.jpg">
 <meta property="og:image:width" content="1200">
@@ -25,14 +25,14 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600..900&display=swap">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="../assets/css/reserve.css?v=1792695906">
+<link rel="stylesheet" href="../assets/css/reserve.css?v=1792843317">
 <meta name="dokkaebi-api" content="https://script.google.com/macros/s/AKfycbw1ukn5kiuJ3rC1IUlTakt7768htxE08COYk8GMvpOcfUWcSVZKUTsxLftt-JXtx4I/exec">
 </head>
 <body class="rv-body">
 <a class="rv-skip" href="#main">본문 바로가기</a>
 <header class="rv-header"><div class="rv-wrap rv-header-in">
   <a class="rv-brand" href="../index.html" aria-label="극단 도깨비 홈페이지"><small>극단</small> 도깨비</a>
-  <nav class="rv-nav" aria-label="좌석 예약 메뉴"><a href="./">공연 안내</a><a href="seats.html" aria-current="page">좌석 예약</a><a href="my.html">내 예약 · 입장</a><a href="admin.html">예약 관리</a><a href="../index.html">극단 도깨비 홈페이지</a></nav>
+  <nav class="rv-nav" aria-label="좌석 예약 메뉴"><a href="./">공연 안내</a><a href="guide.html">예약 방법</a><a href="seats.html" aria-current="page">좌석 예약</a><a href="my.html">내 예약 · 입장</a><a href="admin.html">예약 관리</a><a href="../index.html">홈페이지</a></nav>
 </div></header>
 
 <main id="main" class="rv-page">
@@ -40,35 +40,51 @@
     <a class="rv-back" href="./">← 공연 안내 보기</a>
     <span class="rv-eyebrow">기장군 아동무대공연</span>
     <h1 id="rv-title">〈배탈난 호랑이〉 좌석 예약</h1>
-    <ul class="rv-chips"><li>11월 24일(화) · 25일(수) · 26일(목)</li><li>오전 10시 30분</li><li>안데르센극장</li><li>문의 <a href="tel:01038378479">010-3837-8479</a></li></ul>
+    <ul class="rv-chips"><li>11월 24일(화) · 25일(수) · 26일(목)</li><li>오전 10시 30분</li><li>안데르센극장</li></ul>
+    <p class="rv-rule"><b>예약 오픈 11월 4일(수) 오전 10시</b> · 홈페이지에서만 예약해요 (전화 예약 불가) · <a href="guide.html">예약 방법 보기</a></p>
   </section>
+
+  <div class="rv-wrap"><div class="rv-open" id="rv-open" hidden>
+    <b>아직 예약 전이에요</b>
+    <span>예약 오픈 <b data-open-at></b> · 남은 시간 <b data-open-left></b></span>
+    <span class="rv-sub">지금은 좌석만 미리 볼 수 있어요. 오픈 전에 <a href="guide.html">예약 방법</a>을 꼭 확인해 주세요.</span>
+  </div></div>
 
   <section class="rv-wrap rv-sec" id="seats" aria-labelledby="rv-s1">
     <h2 class="rv-h2" id="rv-s1"><span class="num">1</span>관람 회차 고르기</h2>
     <p class="rv-sub">세 번 모두 같은 공연이에요. 편한 날을 골라 주세요.</p>
     <div class="rv-shows" id="rv-shows"><p class="rv-sub">좌석 현황을 불러오는 중이에요...</p></div>
 
-    <h2 class="rv-h2" style="margin-top:36px"><span class="num">2</span>좌석 고르기</h2>
-    <p class="rv-sub">좌석마다 <b>열 글자와 번호</b>(예: <b>A5</b> = A열 5번)가 적혀 있어요. 누르면 주황색으로 바뀌고, 다른 분이 예약하면 바로 회색으로 바뀝니다.</p>
+    <h2 class="rv-h2" style="margin-top:32px"><span class="num">2</span>인원 정하기</h2>
+    <p class="rv-sub">함께 볼 사람 수를 먼저 정해 주세요. 한 사람에 좌석 하나, 한 번에 최대 <b data-max>100</b>명까지예요.</p>
+    <div class="rv-party" id="rv-party">
+      <div class="rv-stepper"><button type="button" data-step="-1" aria-label="한 명 줄이기">−</button><label><input id="rv-n" type="number" inputmode="numeric" min="1" max="100" value="1" aria-label="인원"><span>명</span></label><button type="button" data-step="1" aria-label="한 명 늘리기">+</button></div>
+      <div class="rv-quick"><button type="button" data-set="1">1명</button><button type="button" data-set="2">2명</button><button type="button" data-set="3">3명</button><button type="button" data-set="4">4명</button><button type="button" data-set="5">5명</button><button type="button" data-set="10">10명</button><button type="button" data-set="20">20명</button><button type="button" data-set="30">30명</button><button type="button" data-set="50">50명</button><button type="button" data-set="100">100명</button></div>
+      <label class="rv-auto"><input type="checkbox" id="rv-auto" checked> 좌석 하나를 누르면 붙어 있는 빈 좌석을 인원만큼 자동으로 골라요</label>
+    </div>
+
+    <h2 class="rv-h2" style="margin-top:32px"><span class="num">3</span>좌석 고르기</h2>
+    <p class="rv-sub">좌석마다 <b>열 글자와 번호</b>(예: <b>A5</b> = A열 5번)가 적혀 있어요. 고른 좌석은 주황색, 다른 분이 예약한 좌석은 회색이에요.</p>
     <div class="rv-board">
       <div class="rv-boardhead">
         <div id="rv-legend"></div>
         <span class="rv-live" id="rv-live"><i></i><span>연결 중...</span></span>
       </div>
+      <div class="rv-mini" id="rv-mini" hidden></div>
       <div class="rv-scroll"><div id="rv-hall"></div></div>
-      <p class="rv-hint">좌석표를 좌우로 밀어서 보세요</p>
     </div>
   </section>
 
   <section class="rv-wrap rv-sec" id="guide" aria-labelledby="rv-g">
-    <h2 class="rv-h2" id="rv-g"><span class="num">3</span>예약 방법</h2>
-    <p class="rv-sub">신청 → 담당자 승인 → 확정 메일 → 공연 당일 도착 확인 순서로 진행돼요.</p>
-    <ol class="rv-info">
-      <li><span class="n">1</span><b>좌석 고르고 신청</b><span>좌석을 고른 뒤 이름·연락처·이메일과 비밀번호를 적어 신청해요. 신청한 좌석은 바로 ‘승인 대기’로 잡혀요.</span></li>
-      <li><span class="n">2</span><b>담당자 확인 후 확정 메일</b><span>담당자가 확인하고 승인하면 적어 주신 이메일로 ‘예약 확정’ 메일과 좌석 찾아가는 길을 보내 드려요.</span></li>
-      <li><span class="n">3</span><b>공연 당일 ‘도착했어요’</b><span>극장에 도착하면 <a href="my.html">내 예약 확인</a>에서 이메일·비밀번호로 들어와 좌석을 확인하고 ‘도착했어요’를 눌러 주세요.</span></li>
-    </ol>
-    <p class="rv-note">한 번에 최대 30석까지 신청할 수 있어요. 어린이집·유치원 단체 관람, 휠체어석 이용, 예약 변경은 <a href="tel:01038378479">010-3837-8479</a>로 연락 주세요. 예약 안내는 문자 대신 이메일로 보내 드려요.</p>
+    <h2 class="rv-h2" id="rv-g"><span class="num">4</span>꼭 알아 두세요</h2>
+    <ul class="rv-rules">
+      <li><b>예약은 홈페이지에서만</b> 받아요. 전화 예약은 받지 않아요.</li>
+      <li>좌석을 처음 고른 때부터 <b>5분 안에</b> 신청해야 해요. 시간이 지나면 좌석이 풀려요.</li>
+      <li>신청하면 좌석이 ‘승인 대기’로 잡히고, 담당자가 확인하면 <b>확정 메일</b>이 가요.</li>
+      <li>같은 회차에 같은 연락처·이메일로는 한 번만 신청할 수 있어요. 인원은 한 번에 모아서 신청해 주세요.</li>
+      <li>공연 당일 극장에 오시면 <a href="my.html">내 예약 확인</a>에서 ‘도착했어요’를 눌러 주세요.</li>
+    </ul>
+    <p class="rv-note">처음이시면 <a href="guide.html"><b>예약 방법</b></a>을 그림과 함께 먼저 봐 주세요. 궁금한 점 문의 <a href="tel:01051155406">010-5115-5406</a> · <a href="tel:01038378479">010-3837-8479</a> (문의만 받아요)</p>
   </section>
 </main>
 
@@ -123,11 +139,11 @@
 </dialog>
 
 <footer class="rv-footer"><div class="rv-wrap">
-  <b>극단 도깨비</b> · 부산광역시 · 공연 문의 <a href="tel:01038378479">010-3837-8479</a><br>
+  <b>극단 도깨비</b> · 부산광역시 · 공연 문의 <a href="tel:01051155406">010-5115-5406</a> · <a href="tel:01038378479">010-3837-8479</a><br>
   <a href="admin.html">예약 관리(관리자)</a> · <a href="../privacy.html">개인정보 처리방침</a> · <a href="../index.html">홈페이지</a> · © 2026 극단 도깨비
 </div></footer>
-<script src="../assets/js/reserve-core.js?v=1792695906"></script>
-<script src="../assets/js/reserve-ui.js?v=1792695906"></script>
-<script src="../assets/js/reserve.js?v=1792695906"></script>
+<script src="../assets/js/reserve-core.js?v=1792843317"></script>
+<script src="../assets/js/reserve-ui.js?v=1792843317"></script>
+<script src="../assets/js/reserve.js?v=1792843317"></script>
 </body>
 </html>

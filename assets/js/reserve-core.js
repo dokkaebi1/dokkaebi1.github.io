@@ -14,7 +14,9 @@ var RSV = (function () {
     venue: '안데르센극장',
     address: '부산광역시 기장군 장안읍 장안로 211',
     org: '극단 도깨비',
-    phone: '010-3837-8479',
+    phones: ['010-5115-5406', '010-3837-8479'],   // 안내문의 문의 번호 순서
+    phone: '010-5115-5406, 010-3837-8479',
+    audience: '4세 이상 · 무료 관람',
     shows: [
       { id: '2026-11-24', time: '10:30' },
       { id: '2026-11-25', time: '10:30' },
@@ -65,7 +67,8 @@ var RSV = (function () {
   var SCHEMA = { sheet: '좌석예약', cols: [['id', '예약번호'], ['createdAt', '신청일시'], ['show', '공연일'], ['seats', '좌석'], ['count', '좌석 수'], ['status', '상태'],
     ['name', '예약자'], ['org', '기관·단체'], ['phone', '연락처'], ['email', '이메일'], ['note', '요청사항'], ['memo', '관리자 메모'],
     ['arrivedAt', '도착 시각'], ['decidedAt', '처리 일시'], ['mailLog', '메일 기록'], ['pw', '비밀번호(암호화 · 고치지 마세요)']] };
-  var DEFAULT_MAX = 30;
+  var DEFAULT_MAX = 100;                 // 한 번에 예약할 수 있는 인원(좌석) 수. 관리 화면 › 설정에서 바꿈 (RSV_MAX2)
+  var DEFAULT_OPEN_AT = '2026-11-04 10:00';   // 예약 오픈 일시. 관리 화면 › 설정에서 바꿈 (RSV_OPEN_AT)
   var HOLD_SEC = 300;   // 고르는 중인 좌석을 '예약 중'으로 잡아 두는 시간(초). 처음 고른 때부터 5분, 연장 없음 — 그 안에 신청하지 않으면 풀립니다
 
   /* ---------- 작은 도구 ---------- */
@@ -119,11 +122,16 @@ var RSV = (function () {
 
   /* ---------- 설정 (스크립트 속성) ---------- */
   function settings(env) {
-    var max = parseInt(env.props.get('RSV_MAX'), 10);
+    var max = parseInt(env.props.get('RSV_MAX2'), 10);
     var testUntil = +(env.props.get('RSV_ARRIVE_TEST') || 0), test = testUntil > nowMs(env);
+    var openAt = env.props.get('RSV_OPEN_AT') || DEFAULT_OPEN_AT;
     return { open: env.props.get('RSV_OPEN') !== '0', max: isNaN(max) ? DEFAULT_MAX : Math.max(1, Math.min(242, max)),
+      openAt: openAt, openAtLabel: openLabel(openAt), notYet: env.now() < openAt,
       arriveTest: test, arriveTestUntil: test ? new Date(testUntil + 9 * 3600e3).toISOString().slice(11, 16) : '' };
   }
+  /* '2026-11-04 10:00' → '11월 4일 (수) 오전 10:00' */
+  function openLabel(at) { return dateLabel(at.slice(0, 10)) + ' ' + timeLabel(at.slice(11, 16)); }
+  function notYetMsg(cfg) { return '좌석 예약은 ' + cfg.openAtLabel + '에 열려요. 그때 다시 와 주세요.'; }
   /* 도착 확인 시험 모드: 관리자가 켜면 2시간 동안 공연 전에도 '도착했어요'를 눌러 볼 수 있음 (저절로 꺼짐) */
   var ARRIVE_TEST_MS = 2 * 3600 * 1000;
   function canArrive(env, x) { return env.today() === x.show || (settings(env).arriveTest && env.today() < x.show); }
@@ -198,6 +206,7 @@ var RSV = (function () {
     var holder = str(req.holder), show = findShow(str(req.show));
     if (!holderOk(holder) || !show) return fail('invalid', '새로고침해 주세요.');
     var cfg = settings(env), seats = seatList(req.seats).filter(function (x) { return SEAT_SET[x]; }).slice(0, cfg.max);
+    if (seats.length && cfg.notYet) return fail('notyet', notYetMsg(cfg));
     if (seats.length && (!cfg.open || env.now() >= show.id + ' ' + show.time)) return fail('closed', '지금은 이 회차를 예약할 수 없어요.');
     var out = null;
     env.lock(function () {
@@ -273,7 +282,8 @@ var RSV = (function () {
       '좌석 찾아가기:'
     ], x.seats.map(function (s) { return '· ' + seatName(s) + ' — ' + seatWhere(s); }), [
       '',
-      '공연 10~15분 전까지 도착해 주세요. 문의: ' + EVENT.phone
+      '공연 10분 전까지 입장을 마쳐 주세요. 공연 중 사진·동영상 촬영은 안 돼요.',
+      '문의: ' + EVENT.phone
     ]));
   }
   function mailReject(env, x, reason) {
@@ -291,12 +301,13 @@ var RSV = (function () {
     if (!(+req.elapsed > 3000)) return fail('slow', '잠시 후 다시 눌러 주세요.');
     var cfg = settings(env), show = findShow(str(req.show));
     if (!show) return fail('show', '공연 회차를 골라 주세요.');
-    if (!cfg.open) return fail('closed', '지금은 온라인 예약을 받지 않아요. ' + EVENT.phone + '로 문의해 주세요.');
+    if (cfg.notYet) return fail('notyet', notYetMsg(cfg));
+    if (!cfg.open) return fail('closed', '지금은 예약을 받지 않아요. 궁금한 점은 ' + EVENT.phone + '로 문의해 주세요.');
     if (env.now() >= show.id + ' ' + show.time) return fail('closed', '이 회차는 예약이 끝났어요.');
     var seats = seatList(req.seats);
     if (!seats.length) return fail('seats', '좌석을 골라 주세요.');
     if (seats.some(function (s) { return !SEAT_SET[s]; })) return fail('seats', '없는 좌석이 있어요. 새로고침해 주세요.');
-    if (seats.length > cfg.max) return fail('seats', '한 번에 ' + cfg.max + '석까지 예약할 수 있어요. 단체 관람은 ' + EVENT.phone + '로 문의해 주세요.');
+    if (seats.length > cfg.max) return fail('seats', '한 번에 ' + cfg.max + '명(좌석)까지 예약할 수 있어요.');
 
     var errors = {};
     var name = clean(req.name, 30), org = clean(req.org, 60), phone = clean(req.phone, 20), email = normEmail(req.email);
@@ -313,7 +324,7 @@ var RSV = (function () {
     if (!env.sha256) return fail('server', '서버 설정이 끝나지 않았어요.');
 
     var rl = 'rsvn:' + digits, n = +(env.cache.get(rl) || 0);
-    if (n >= 5) return fail('many', '신청이 너무 많아요. ' + EVENT.phone + '로 문의해 주세요.');
+    if (n >= 5) return fail('many', '같은 번호로 신청이 너무 많아요. 잠시 뒤 다시 해 주세요.');
 
     var out = null;
     env.lock(function () {
@@ -691,8 +702,13 @@ var RSV = (function () {
     if (req.open !== undefined) env.props.set('RSV_OPEN', req.open ? '1' : '0');
     if (req.max !== undefined) {
       var n = parseInt(req.max, 10);
-      if (isNaN(n) || n < 1 || n > 242) return fail('invalid', '최대 좌석 수는 1~242 사이 숫자로 적어 주세요.');
-      env.props.set('RSV_MAX', String(n));
+      if (isNaN(n) || n < 1 || n > 242) return fail('invalid', '최대 인원은 1~242 사이 숫자로 적어 주세요.');
+      env.props.set('RSV_MAX2', String(n));
+    }
+    if (req.openAt !== undefined) {
+      var at = str(req.openAt).replace('T', ' ').slice(0, 16);
+      if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(at)) return fail('invalid', '예약 오픈 일시를 확인해 주세요. (예: 2026-11-04 10:00)');
+      env.props.set('RSV_OPEN_AT', at);
     }
     var cleared = 0;
     if (req.arriveTest !== undefined) {
@@ -709,7 +725,12 @@ var RSV = (function () {
     try {
       if (env.ensure) env.ensure();
       var a = str(req.action);
-      if (a === 'rsvState') { var st = publicState(env); st.holds = holdMap(env, str(req.holder)); return st; }
+      if (a === 'rsvState') {
+        var st = publicState(env), cf = settings(env);
+        st.holds = holdMap(env, str(req.holder));
+        st.max = cf.max; st.openAt = cf.openAt; st.openAtLabel = cf.openAtLabel; st.notYet = cf.notYet;   // 캐시와 상관없이 지금 기준
+        return st;
+      }
       if (a === 'rsvHold') return hold(req, env);
       if (a === 'rsvBook') return book(req, env);
       if (a === 'rsvLogin') return guestLogin(req, env);

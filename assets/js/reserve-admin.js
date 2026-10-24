@@ -271,7 +271,8 @@
     var d = S.data, s = d.settings;
     return '<div class="rv-card" style="max-width:640px"><form data-settings style="display:grid;gap:14px">'
       + '<label class="rv-consent" style="font-size:16px;color:var(--ink);font-weight:700;margin:0"><input type="checkbox" name="open"' + (s.open ? ' checked' : '') + '> 홈페이지에서 온라인 예약 받기</label>'
-      + '<label class="rv-fld" style="max-width:260px"><span>한 번에 예약할 수 있는 최대 좌석 수</span><input name="max" type="number" min="1" max="242" value="' + s.max + '"></label>'
+      + '<label class="rv-fld" style="max-width:260px"><span>한 번에 예약할 수 있는 최대 인원</span><input name="max" type="number" min="1" max="242" value="' + s.max + '"></label>'
+      + '<label class="rv-fld" style="max-width:300px"><span>예약 오픈 일시</span><input name="openAt" type="datetime-local" value="' + esc(String(s.openAt || '').replace(' ', 'T')) + '"><small class="help">' + (s.notYet ? '지금은 오픈 전이에요 (' + esc(s.openAtLabel) + ' 오픈)' : '지금 예약을 받는 중이에요') + '. 바꾸면 손님 화면의 남은 시간이 바로 바뀌지만, 공연 안내·포스터·팩스 문구는 그대로이니 제작자에게 함께 알려 주세요.</small></label>'
       + '<button class="rv-btn rv-btn-red rv-btn-sm" type="submit" style="justify-self:start">설정 저장</button></form></div>'
       + '<div class="rv-card" style="max-width:640px;margin-top:16px;gap:10px"><b>도착 확인 시험 모드</b>'
       + '<p class="rv-sub" style="margin:0;font-size:15px">켜면 2시간 동안 공연 날이 아니어도 손님 화면의 ‘공연장에 도착했어요’를 눌러 볼 수 있어요. 2시간 뒤 저절로 꺼져요. 확정된 예약에서만 눌러져요.</p>'
@@ -469,7 +470,7 @@
     }
     if (f.hasAttribute('data-settings')) {
       btn.disabled = true;
-      call('rsvAdminSettings', { open: f.elements.open.checked, max: f.elements.max.value }).then(function (r) { btn.disabled = false; after(r, '설정을 저장했어요.'); });
+      call('rsvAdminSettings', { open: f.elements.open.checked, max: f.elements.max.value, openAt: f.elements.openAt.value }).then(function (r) { btn.disabled = false; after(r, '설정을 저장했어요.'); });
     }
     if (f.hasAttribute('data-block') || f.hasAttribute('data-book')) {
       var block = f.hasAttribute('data-block'), el = f.elements;
