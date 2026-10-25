@@ -3,13 +3,23 @@
   'use strict';
   var R = window.RSV, U = window.RSVUI, esc = U.esc;
   var KEY = 'jg-rsv-token';
-  var S = { token: null, data: null, poller: null };
+  var S = { token: null, data: null, poller: null, gen: 0 };   // gen: 로그인할 때마다 바뀜 → 나간 뒤 늦게 온 응답은 버림
   var root = U.$('#my-root');
 
   function tokenGet() { try { return sessionStorage.getItem(KEY); } catch (e) { return S.token; } }
   function tokenSet(t) { S.token = t; try { if (t) sessionStorage.setItem(KEY, t); else sessionStorage.removeItem(KEY); } catch (e) {} }
 
+  /* 지금 로그인(gen)이 그대로일 때만 응답을 씀 */
+  function mineCall(action, data) {
+    var g = S.gen, t = S.token;
+    return U.api(action, Object.assign({ token: t }, data || {})).then(function (r) {
+      if (g !== S.gen || t !== S.token) return { ok: false, code: 'stale' };
+      return r;
+    });
+  }
   function loginView(msg, email) {
+    S.gen++;
+    if (S.token) U.api('rsvLogout', { token: S.token });   // 서버에서도 이 로그인을 끝냄
     tokenSet(null); S.data = null;
     root.innerHTML = '<div class="rv-card rv-login">'
       + '<div><span class="rv-eyebrow">좌석 예약</span><h2>내 예약 확인 · 입장</h2><p class="rv-sub" style="margin:6px 0 0">예약할 때 적은 이메일과 비밀번호를 넣어 주세요.</p></div>'
@@ -39,6 +49,7 @@
     });
   }
   function loggedIn(r) {
+    S.gen++;
     tokenSet(r.token);
     S.data = r;
     render();
@@ -86,8 +97,11 @@
         btn.disabled = false;
         if (!r.ok) { U.fieldErrors(f1, r.errors); U.$('.rv-err', f1).textContent = r.message; return; }
         f1.hidden = true; f2.hidden = false;
-        U.$('[data-sent]', f2).textContent = '예약에 적힌 이메일 ' + r.sentTo + '으로 확인 번호를 보냈어요. 메일이 안 보이면 스팸함도 확인해 주세요.'
-          + (r.byPhone ? ' 이 주소가 내 이메일이 아니면 예약할 때 이메일을 잘못 적은 거예요. ' + R.EVENT.phone + '로 연락 주시면 고쳐 드려요.' : '');
+        // 예약이 있든 없든 같은 안내 (다른 사람이 예약 여부를 알아낼 수 없게)
+        U.$('[data-sent]', f2).textContent = (r.byPhone
+          ? '이 번호로 신청한 예약이 있으면, 예약할 때 적은 이메일로 6자리 확인 번호를 보냈어요.'
+          : '이 이메일(' + r.sentTo + ')로 신청한 예약이 있으면 6자리 확인 번호를 보냈어요.')
+          + ' 메일이 안 보이면 스팸함도 확인해 주세요. 몇 분이 지나도 오지 않으면 예약할 때 적은 이메일이나 번호가 다를 수 있어요. 예약 시스템 문의 ' + R.EVENT.sysPhone + '로 연락 주세요.';
         f2.elements.code.focus();
       });
     });
@@ -110,8 +124,9 @@
 
   function refresh() {
     if (!S.token) return Promise.resolve();
-    return U.api('rsvMine', { token: S.token }).then(function (r) {
-      if (!r.ok) { if (r.code === 'auth') loginView('로그인 시간이 지났어요. 다시 넣어 주세요.'); return; }
+    return mineCall('rsvMine').then(function (r) {
+      if (r.code === 'stale') return;
+      if (!r.ok) { if (r.code === 'auth') loginView(/비밀번호/.test(r.message) ? r.message : '로그인 시간이 지났어요. 다시 넣어 주세요.'); return; }
       // 예약 내용뿐 아니라 날짜·도착 시험 모드가 바뀌어도 다시 그림 (도착 버튼이 바로 눌리게)
       var key = function (d) { return d ? JSON.stringify([d.list, d.today, !!d.arriveTest]) : ''; };
       var before = key(S.data), after = key(r);
@@ -183,7 +198,8 @@
       U.confirm('도착하셨나요?', '안데르센극장에 도착했을 때 눌러 주세요.\n담당자 화면에 도착으로 표시돼요.', '네, 도착했어요').then(function (yes) {
         if (!yes) return;
         a.disabled = true;
-        U.api('rsvArrive', { token: S.token, id: a.dataset.arrive }).then(function (r) {
+        mineCall('rsvArrive', { id: a.dataset.arrive }).then(function (r) {
+          if (r.code === 'stale') return;
           if (!r.ok) { a.disabled = false; U.toast(r.message, true); if (r.code === 'auth') loginView(r.message); return; }
           U.toast('도착을 알렸어요. 즐거운 관람 되세요!');
           refresh();
@@ -193,8 +209,11 @@
     if (c) {
       U.confirm('예약을 취소할까요?', '취소하면 좌석이 다른 분께 열려요. 되돌릴 수 없어요.', '예약 취소', true).then(function (yes) {
         if (!yes) return;
-        U.api('rsvCancel', { token: S.token, id: c.dataset.cancel }).then(function (r) {
-          if (!r.ok) { U.toast(r.message, true); return; }
+        c.disabled = true;
+        mineCall('rsvCancel', { id: c.dataset.cancel }).then(function (r) {
+          if (r.code === 'stale') return;
+          c.disabled = false;
+          if (!r.ok) { U.toast(r.message, true); if (r.code === 'auth') loginView(r.message); return; }
           U.toast('예약을 취소했어요.');
           refresh();
         });
@@ -206,8 +225,9 @@
   if (t) {
     S.token = t;
     root.innerHTML = '<p class="rv-sub">예약을 불러오는 중이에요...</p>';
-    U.api('rsvMine', { token: t }).then(function (r) {
-      if (!r.ok) { loginView(r.code === 'auth' ? '' : r.message); return; }
+    mineCall('rsvMine').then(function (r) {
+      if (r.code === 'stale') return;
+      if (!r.ok) { loginView(r.code === 'auth' ? (/비밀번호/.test(r.message) ? r.message : '') : r.message); return; }
       S.data = r; render(); startPoll();
     });
   } else loginView();

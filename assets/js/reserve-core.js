@@ -115,21 +115,50 @@ var RSV = (function () {
   /* ---------- 신청 순서대로 자동 배정 (2026-10-25 바꿈: 손님이 좌석을 고르지 않음) ----------
      줄마다 왼쪽 구역(1~9번)과 오른쪽 구역(10~17번)으로 나누고, 예약이 들어온 순서대로 구역을 번갈아
      (첫 예약 왼쪽 → 다음 예약 오른쪽 → 그다음 왼쪽 …) 그 구역의 앞줄부터 빈 좌석을 차례로 채움.
-     예) 12명 → A5~A9, B1~B7 / 다음 16명 → A10~A17, B10~B17 / 다음 예약 → B8, B9, C1 …
+     예) 12명 → A5~A9, B1~B7 / 다음 16명 → A10~A17, B10~B17 / 다음 10명 → B8~B9, C1~C8
+     일행 붙여 앉히기 (2026-10-26): 한 줄에 들어가는 인원이면 그 구역에서 한 줄에 나란히 비어 있는 가장 앞줄 자리를 먼저 씀
+       (취소로 생긴 빈자리 때문에 가족·소규모 일행이 떨어져 앉지 않게). 그런 줄이 없으면 앞줄부터 차례로.
      휠체어석 A1~A3 은 '휠체어 이용 인원'을 적은 만큼만 배정하고 나머지는 비워 둠. O·P 세로 줄도 배정하지 않음.
-     차례 구역에 자리가 모자라면 다른 구역에 다 들어가면 그쪽으로, 아니면 남은 자리를 채우고 다른 구역으로 이어서. */
+     휠체어 동행인 (2026-10-26): 차례와 상관없이 휠체어석 가까운 1층 왼쪽 구역 → 1층 오른쪽 구역 → 나머지 차례로.
+       동행인이 2층으로 가면 apart 표시 (관리 화면에서 확인).
+     차례 구역에 자리가 모자라면 다른 구역에 다 들어가면 그쪽으로, 아니면 남은 자리를 채우고 다른 구역으로 이어서.
+     (2층은 1층과 떨어진 구조가 아니라서 구역을 끝까지 채운 뒤 2층으로 이어지는 지금 순서를 그대로 둠 · 2026-10-26 결정) */
   var BLOCK = { L: [], R: [] };
   ROWS.forEach(function (r) { rowNums(r).forEach(function (n) { if (WHEEL.indexOf(r + n) < 0) BLOCK[n <= 9 ? 'L' : 'R'].push(r + n); }); });
+  function onFloor1(s) { return 'ABCDEFG'.indexOf(s.charAt(0)) >= 0; }
+  /* 빈 좌석 목록(앞줄부터)에서 한 줄에 need 석이 나란히 비어 있는 가장 앞줄 자리 (없으면 null) */
+  function rowRun(list, need) {
+    var run = [];
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i], prev = run[run.length - 1];
+      if (prev && prev.charAt(0) === s.charAt(0) && +s.slice(1) === +prev.slice(1) + 1) run.push(s); else run = [s];
+      if (run.length >= need) return run.slice(run.length - need);
+    }
+    return null;
+  }
+  function takeFrom(list, need) { return (need <= 9 && rowRun(list, need)) || list.slice(0, need); }
   function assignSeats(occ, count, wheel, side) {
     var freeW = WHEEL.filter(function (s) { return !occ[s]; });
     if (wheel > freeW.length) return { err: 'wheel', left: freeW.length };
     var need = count - wheel;
-    var first = BLOCK[side === 'R' ? 'R' : 'L'].filter(function (s) { return !occ[s]; });
-    var other = BLOCK[side === 'R' ? 'L' : 'R'].filter(function (s) { return !occ[s]; });
-    if (need > first.length + other.length) return { err: 'full', left: first.length + other.length };
-    if (need > first.length && need <= other.length) { var t = first; first = other; other = t; }
-    var a = first.slice(0, need);
-    return { seats: freeW.slice(0, wheel).concat(a, other.slice(0, need - a.length)) };
+    function free(b, f1) { return BLOCK[b].filter(function (s) { return !occ[s] && (f1 == null || onFloor1(s) === f1); }); }
+    var all = free('L').length + free('R').length;
+    if (need > all) return { err: 'full', left: all };
+    var picked = [];
+    if (wheel) {
+      var L1 = free('L', true), R1 = free('R', true), F1 = L1.concat(R1);
+      if (need <= L1.length) picked = takeFrom(L1, need);
+      else if (need <= R1.length) picked = takeFrom(R1, need);
+      else if (need <= F1.length) picked = F1.slice(0, need);
+      else picked = F1.concat(free('L', false), free('R', false)).slice(0, need);
+    } else {
+      var first = free(side === 'R' ? 'R' : 'L'), other = free(side === 'R' ? 'L' : 'R');
+      if (need > first.length && need <= other.length) { var t = first; first = other; other = t; }
+      picked = need <= first.length ? takeFrom(first, need) : first.concat(other.slice(0, need - first.length));
+    }
+    var out = { seats: freeW.slice(0, wheel).concat(picked) };
+    if (wheel && picked.some(function (s) { return !onFloor1(s); })) out.apart = true;
+    return out;
   }
   function sideKey(showId) { return 'RSV_SIDE_' + showId.replace(/-/g, ''); }
 
@@ -150,10 +179,11 @@ var RSV = (function () {
   var ACTIVE = {}; ACTIVE[ST.WAIT] = 'w'; ACTIVE[ST.OK] = 't'; ACTIVE[ST.BLOCK] = 'b';
   var SCHEMA = { sheet: '좌석예약', cols: [['id', '예약번호'], ['createdAt', '신청일시'], ['show', '공연일'], ['seats', '좌석'], ['count', '좌석 수'], ['status', '상태'],
     ['name', '예약자'], ['org', '기관·단체'], ['phone', '연락처'], ['email', '이메일'], ['note', '요청사항'], ['memo', '관리자 메모'],
-    ['arrivedAt', '도착 시각'], ['decidedAt', '처리 일시'], ['mailLog', '메일 기록'], ['pw', '비밀번호(암호화 · 고치지 마세요)']] };
+    ['arrivedAt', '도착 시각'], ['decidedAt', '처리 일시'], ['mailLog', '메일 기록'], ['pw', '비밀번호(암호화 · 고치지 마세요)'],
+    ['req', '요청번호(고치지 마세요)']] };   // 요청번호: 같은 신청을 다시 보내도 한 번만 접수되게 (맨 끝 열에 추가 · 2026-10-26)
   var DEFAULT_MAX = 100;                 // 한 번에 예약할 수 있는 인원(좌석) 수. 관리 화면 › 설정에서 바꿈 (RSV_MAX2)
   var DEFAULT_OPEN_AT = '2026-11-04 10:00';   // 예약 오픈 일시. 관리 화면 › 설정에서 바꿈 (RSV_OPEN_AT)
-  var HOLD_SEC = 300;   // 고르는 중인 좌석을 '예약 중'으로 잡아 두는 시간(초). 처음 고른 때부터 5분, 연장 없음 — 그 안에 신청하지 않으면 풀립니다
+  var API_V = 2;        // 예약 화면과 서버의 약속 번호. 예전(좌석 직접 고르기) 화면이 보낸 신청은 새로고침하라고 돌려보냄
 
   /* ---------- 작은 도구 ---------- */
   var WEEK = ['일', '월', '화', '수', '목', '금', '토'];
@@ -182,7 +212,7 @@ var RSV = (function () {
     var st = STATUSES.indexOf(str(r.status).trim()) >= 0 ? str(r.status).trim() : ST.WAIT;
     return { id: str(r.id).trim(), createdAt: str(r.createdAt), show: str(r.show).trim(), seats: seatList(r.seats), status: st,
       name: str(r.name), org: str(r.org), phone: str(r.phone), email: normEmail(r.email), note: str(r.note), memo: str(r.memo),
-      arrivedAt: str(r.arrivedAt), decidedAt: str(r.decidedAt), mailLog: str(r.mailLog), pw: str(r.pw) };
+      arrivedAt: str(r.arrivedAt), decidedAt: str(r.decidedAt), mailLog: str(r.mailLog), pw: str(r.pw), req: str(r.req) };
   }
   function fromRec(x) {
     var o = {};
@@ -191,11 +221,11 @@ var RSV = (function () {
     o.count = String(x.seats.length);
     return o;
   }
+  /* 저장은 바뀐 예약 줄만 고칩니다 (전체를 지우고 다시 쓰지 않음 → 쓰다가 실패해도 다른 예약은 그대로) */
   function readAll(env) { return env.store.read('rsv').map(toRec).filter(function (x) { return x.id; }); }
-  function writeAll(env, recs) {
-    env.store.write('rsv', recs.sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0; }).map(fromRec));
-    bump(env);
-  }
+  function addRec(env, x) { env.store.append('rsv', fromRec(x)); bump(env); }
+  function saveRecs(env, list) { list.forEach(function (x) { env.store.update('rsv', fromRec(x)); }); if (list.length) bump(env); }
+  function removeRecs(env, ids) { if (ids.length) { env.store.remove('rsv', ids); bump(env); } }
   function bump(env) { env.props.set('RSV_VER', String((+env.props.get('RSV_VER') || 0) + 1)); }
   /* 손님에게 보여 줄 내용 (비밀번호·관리자 메모 제외) */
   function mine(x) {
@@ -225,9 +255,10 @@ var RSV = (function () {
   function clearTestArrivals(env) {
     var n = 0;
     env.lock(function () {
-      var recs = readAll(env);
-      recs.forEach(function (x) { if (isTestArrival(x)) { x.arrivedAt = ''; n++; } });
-      if (n) writeAll(env, recs);
+      var hit = readAll(env).filter(isTestArrival);
+      hit.forEach(function (x) { x.arrivedAt = ''; });
+      saveRecs(env, hit);
+      n = hit.length;
     });
     return n;
   }
@@ -253,66 +284,30 @@ var RSV = (function () {
     });
     return map;
   }
+  /* 남은 좌석은 자동 배정할 수 있는 좌석만 셈: 일반석(1~9번 · 10~17번 구역) / 휠체어석(A1~A3) 따로 */
+  function freeCount(o) {
+    var gen = 0, wh = 0;
+    BLOCK.L.concat(BLOCK.R).forEach(function (x) { if (!o[x]) gen++; });
+    WHEEL.forEach(function (x) { if (!o[x]) wh++; });
+    return { gen: gen, wh: wh };
+  }
   function showState(s, env, cfg, occ) {
-    var taken = Object.keys(occ[s.id] || {}).length;
+    var f = freeCount(occ[s.id] || {});
     var closed = env.now() >= s.id + ' ' + s.time;
-    return { id: s.id, date: s.id, time: s.time, label: showLabel(s.id), total: SEATS.length, left: SEATS.length - taken,
+    return { id: s.id, date: s.id, time: s.time, label: showLabel(s.id), total: SEATS.length, left: f.gen + f.wh, leftGen: f.gen, leftWheel: f.wh,
       closed: closed, open: cfg.open && !closed };
   }
-  /* ---------- 고르는 중인 좌석 잡아 두기 (구글 캐시, 회차별 {좌석: {h: 고르는 사람, t: 끝나는 시각(ms)}}) ---------- */
   function nowMs(env) { return env.ms ? env.ms() : new Date().getTime(); }
-  function holderOk(h) { return /^[a-f0-9]{16,40}$/.test(str(h)); }
-  function readHolds(env, show) {
-    var m = {}, now = nowMs(env), out = {};
-    try { m = JSON.parse(env.cache.get('rsv:hold:' + show) || '{}') || {}; } catch (e) { m = {}; }
-    for (var k in m) if (m[k] && m[k].t > now) out[k] = m[k];
-    return out;
-  }
-  function writeHolds(env, show, m) { env.cache.put('rsv:hold:' + show, JSON.stringify(m), HOLD_SEC + 60); }
-  /* 다른 사람이 잡아 둔 좌석만 {좌석: 'h'} 로 */
-  function holdMap(env, me) {
-    var out = {};
-    EVENT.shows.forEach(function (s) {
-      var m = readHolds(env, s.id), o = {};
-      for (var k in m) if (m[k].h !== me) o[k] = 'h';
-      out[s.id] = o;
-    });
-    return out;
-  }
-  function releaseHolds(env, show, holder, seats) {
-    var m = readHolds(env, show), set = {};
-    (seats || []).forEach(function (x) { set[x] = true; });
-    for (var k in m) if ((holder && m[k].h === holder) || set[k]) delete m[k];
-    writeHolds(env, show, m);
-  }
-  /* 손님이 좌석을 누를 때마다: 이 사람의 잡아 둔 좌석을 seats 로 바꿈. 다른 사람이 예약했거나 잡아 둔 좌석은 빼고 알려 줌.
-     끝나는 시각은 이 사람이 (이 회차에서) 처음 좌석을 고른 때 + 5분. 좌석을 더 골라도 늘어나지 않습니다 */
-  function hold(req, env) {
-    var holder = str(req.holder), show = findShow(str(req.show));
-    if (!holderOk(holder) || !show) return fail('invalid', '새로고침해 주세요.');
-    var cfg = settings(env), seats = seatList(req.seats).filter(function (x) { return SEAT_SET[x]; }).slice(0, cfg.max);
-    if (seats.length && cfg.notYet) return fail('notyet', notYetMsg(cfg));
-    if (seats.length && (!cfg.open || env.now() >= show.id + ' ' + show.time)) return fail('closed', '지금은 이 회차를 예약할 수 없어요.');
-    var out = null;
-    env.lock(function () {
-      var occ = publicState(env).seats[show.id] || {}, m = readHolds(env, show.id), now = nowMs(env);
-      var got = [], lost = [], until = 0;
-      for (var k in m) if (m[k].h === holder) { until = until ? Math.min(until, m[k].t) : m[k].t; delete m[k]; }
-      if (!until) until = now + HOLD_SEC * 1000;
-      seats.forEach(function (x) {
-        if (occ[x] || m[x]) lost.push(x);
-        else { m[x] = { h: holder, t: until }; got.push(x); }
-      });
-      writeHolds(env, show.id, m);
-      out = { ok: true, show: show.id, held: got, lost: lost, holds: holdMap(env, holder), sec: HOLD_SEC, now: now, until: got.length ? until : 0 };
-    });
-    return out;
-  }
 
   function publicState(env) {
     var ver = env.props.get('RSV_VER') || '0', key = 'rsv:pub:' + ver;
     var hit = env.cache.get(key);
-    if (hit) { var o = JSON.parse(hit); o.now = env.now(); return o; }
+    if (hit) {   // 캐시에 담긴 동안 공연 시각이 지나도 마감으로 보이게 다시 계산
+      var o = JSON.parse(hit), now = env.now();
+      o.now = now;
+      o.shows.forEach(function (s) { s.closed = now >= s.id + ' ' + s.time; s.open = o.open && !s.closed; });
+      return o;
+    }
     var cfg = settings(env), occ = occupancy(readAll(env));
     var out = {
       ok: true, ver: ver, open: cfg.open, max: cfg.max, now: env.now(),
@@ -391,26 +386,46 @@ var RSV = (function () {
       '', '다른 좌석이나 회차로 다시 신청하실 수 있습니다.', siteUrl(env) + '/reserve/seats.html', ''
     ], contactLines()));
   }
-  function logMail(x, what, err) { x.mailLog = clean((x.mailLog ? x.mailLog + '\n' : '') + what + (err ? ' ✗ ' + err : ' ✓'), 600); }
+  /* 메일 기록에 한 줄 더함. 길어지면 오래된 줄부터 덜어 내고 최근 기록을 남김 */
+  function logMail(x, what, err) {
+    var log = clean((x.mailLog ? x.mailLog + '\n' : '') + what + (err ? ' ✗ ' + err : ' ✓'));
+    while (log.length > 1500 && log.indexOf('\n') >= 0) log = log.slice(log.indexOf('\n') + 1);
+    x.mailLog = log.slice(-1500);
+  }
+  /* 접수 메일을 보냈는지 (기록 기준): true 보냄 / false 실패 / null 모름 */
+  function receiptMailed(x) { return /접수 메일[^\n]*✓/.test(x.mailLog) ? true : /접수 메일[^\n]*✗/.test(x.mailLog) ? false : null; }
 
-  /* ---------- 손님: 예약 신청 ---------- */
-  function book(req, env) {
-    if (req.website) return { ok: true, id: 'R0000', seats: [] };            // 자동 입력 방지용 숨은 칸
-    // 같은 요청번호로 다시 오면(응답을 못 받고 다시 보낸 경우) 처음 결과를 그대로 돌려줌 → 두 번 접수되지 않음
-    var reqId = str(req.reqId).replace(/[^\w-]/g, '').slice(0, 60), rk = 'rsvreq:' + reqId;
-    if (reqId) { var prev = env.cache.get(rk); if (prev) { try { var p = JSON.parse(prev); p.again = true; return p; } catch (e) {} } }
-    if (!(+req.elapsed > 3000)) return fail('slow', '잠시 후 다시 눌러 주세요.');
-    var cfg = settings(env), show = findShow(str(req.show));
-    if (!show) return fail('show', '공연 회차를 골라 주세요.');
+  /* ---------- 손님: 예약 신청 ----------
+     순서: 입력 확인 → (잠금 안) 같은 요청번호 확인 · 접수 시각 재확인 · 중복 확인 · 좌석 배정 · 예약 줄 저장 → (잠금 밖) 메일 → 메일 기록
+     예약 줄이 저장된 뒤에는 메일·기록이 실패해도 예약은 그대로 남고 성공으로 답함 (메일은 관리 화면에서 다시 보내기).
+     요청번호(reqId)는 예약 줄에 '요청번호:신청 내용 지문'으로 저장 → 응답을 못 받고 다시 보내도 같은 결과,
+     같은 요청번호로 내용(회차·인원·휠체어·연락처)이 바뀐 신청이 오면 거절 */
+  function bookResult(x, again) {
+    var o = { ok: true, id: x.id, show: x.show, showLabel: showLabel(x.show), seats: x.seats, status: x.status };
+    var m = receiptMailed(x);
+    if (m !== null) o.mailed = m;
+    if (again) o.again = true;
+    return o;
+  }
+  function openCheck(env, show) {
+    var cfg = settings(env);
     if (cfg.notYet) return fail('notyet', notYetMsg(cfg));
     if (!cfg.open) return fail('closed', '지금은 예약을 받지 않아요. 궁금한 점은 ' + EVENT.phone + '로 문의해 주세요.');
     if (env.now() >= show.id + ' ' + show.time) return fail('closed', '이 회차는 예약이 끝났어요.');
-    // 좌석은 서버가 신청 순서대로 배정 (count = 인원, wheel = 그중 휠체어 이용 인원). 예전 화면이 보낸 seats 는 인원으로만 씀
-    var count = Math.floor(+req.count || seatList(req.seats).length), wheel = Math.floor(+req.wheel || 0);
+    return null;
+  }
+  function book(req, env) {
+    if (req.website) return { ok: true, id: 'R0000', seats: [] };            // 자동 입력 방지용 숨은 칸
+    var reqId = str(req.reqId).replace(/[^\w-]/g, '').slice(0, 60);
+    if (+req.v !== API_V || reqId.length < 16) return fail('old', '예약 화면이 새로 바뀌었어요. 화면을 새로고침(⟳)한 뒤 다시 신청해 주세요.');
+    if (!(+req.elapsed > 3000)) return fail('slow', '잠시 후 다시 눌러 주세요.');
+    var cfg = settings(env), show = findShow(str(req.show));
+    if (!show) return fail('show', '공연 회차를 골라 주세요.');
+    // 좌석은 서버가 신청 순서대로 배정 (count = 인원, wheel = 그중 휠체어 이용 인원)
+    var count = Math.floor(+req.count), wheel = Math.floor(+req.wheel || 0);
     if (!(count >= 1)) return fail('seats', '인원을 정해 주세요.');
     if (count > cfg.max) return fail('seats', '한 번에 ' + cfg.max + '명(좌석)까지 예약할 수 있어요.');
-    if (wheel < 0 || wheel > WHEEL.length || wheel > count) return fail('wheel', '휠체어 이용 인원을 확인해 주세요 (최대 ' + WHEEL.length + '명, 전체 인원 안에서).');
-    var seats = [];
+    if (!(wheel >= 0) || wheel > WHEEL.length || wheel > count) return fail('wheel', '휠체어 이용 인원을 확인해 주세요 (최대 ' + WHEEL.length + '명, 전체 인원 안에서).');
 
     var errors = {};
     var name = clean(req.name, 30), org = clean(req.org, 60), phone = clean(req.phone, 20), email = normEmail(req.email);
@@ -425,52 +440,68 @@ var RSV = (function () {
     if (!req.consent) errors.consent = '개인정보 수집·이용에 동의해 주세요';
     if (Object.keys(errors).length) return fail('invalid', '입력한 내용을 확인해 주세요.', { errors: errors });
     if (!env.sha256) return fail('server', '서버 설정이 끝나지 않았어요.');
+    var tag = reqId + ':' + env.sha256([show.id, count, wheel, digits, email].join('|')).slice(0, 16);
 
-    var rl = 'rsvn:' + digits, n = +(env.cache.get(rl) || 0);
-    if (n >= 5) return fail('many', '같은 번호로 신청이 너무 많아요. 잠시 뒤 다시 해 주세요.');
-
-    var out = null;
+    var out = null, rec = null, rl = 'rsvn:' + digits;
     env.lock(function () {
-      var recs = readAll(env), occ = occupancy(recs)[show.id], me = str(req.holder);
+      var recs = readAll(env);
+      var same = recs.filter(function (x) { return x.req && x.req.split(':')[0] === reqId; })[0];
+      if (same) {
+        out = same.req === tag ? bookResult(same, true)
+          : fail('reqchanged', '이 화면에서 먼저 보낸 신청(예약번호 ' + same.id + ')과 내용이 달라요. 먼저 ‘내 예약 확인’에서 앞의 신청을 확인한 뒤, 화면을 새로고침하고 다시 신청해 주세요.');
+        return;
+      }
+      var closed = openCheck(env, show);   // 잠금을 기다리는 사이 마감·중단됐는지 저장 직전에 다시 확인
+      if (closed) { out = closed; return; }
       var dup = recs.filter(function (x) {
         return x.show === show.id && (x.status === ST.WAIT || x.status === ST.OK) && (x.email === email || x.phone.replace(/\D/g, '') === digits);
       })[0];
-      if (dup) { out = fail('dup', '이미 이 회차에 같은 연락처나 이메일로 신청한 예약이 있어요. ‘내 예약 확인’에서 확인해 주세요. 좌석을 더하거나 바꾸려면 ' + EVENT.phone + '로 연락 주세요.'); return; }
+      if (dup) { out = fail('dup', '이 회차에 같은 휴대전화 번호나 같은 이메일로 신청한 예약이 이미 있어요. ‘내 예약 확인’에서 확인해 주세요. 인원을 더하거나 바꾸려면 ' + EVENT.phone + '로 연락 주세요.'); return; }
+      if (+(env.cache.get(rl) || 0) >= 5) { out = fail('many', '같은 번호로 신청이 너무 많아요. 잠시 뒤 다시 해 주세요.'); return; }
       var side = env.props.get(sideKey(show.id)) === 'R' ? 'R' : 'L';
-      var got = assignSeats(occ, count, wheel, side);
-      if (got.err === 'wheel') { out = fail('wheel', '휠체어석이 ' + got.left + '석 남았어요. 휠체어 이용 인원을 줄여 주세요.'); return; }
-      if (got.err === 'full') { out = fail('full', '이 회차에 남은 좌석이 ' + got.left + '석이라 ' + count + '명은 예약할 수 없어요. 인원을 줄이거나 다른 회차를 골라 주세요.', { left: got.left }); return; }
-      seats = got.seats;
-      env.props.set(sideKey(show.id), side === 'L' ? 'R' : 'L');   // 다음 예약은 반대쪽 구역부터
+      var got = assignSeats(occupancy(recs)[show.id], count, wheel, side);
+      if (got.err === 'wheel') { out = fail('wheel', '휠체어석이 ' + got.left + '석 남았어요. 휠체어 이용 인원을 줄여 주세요.', { leftWheel: got.left }); return; }
+      if (got.err === 'full') { out = fail('full', '이 회차에 남은 일반석이 ' + got.left + '석이라 ' + (count - wheel) + '명은 예약할 수 없어요. 인원을 줄이거나 다른 회차를 골라 주세요.', { left: got.left }); return; }
       var ids = {}; recs.forEach(function (x) { ids[x.id] = true; });
       var id;
       do { id = 'R' + show.id.slice(5).replace('-', '') + '-' + env.uuid().slice(0, 4).toUpperCase(); } while (ids[id]);
       var salt = env.uuid().slice(0, 12);
-      var rec = { id: id, createdAt: env.now(), show: show.id, seats: seats, status: ST.WAIT, name: name, org: org, phone: phone, email: email,
-        note: note, memo: '', arrivedAt: '', decidedAt: '', mailLog: '', pw: salt + '$' + env.sha256(salt + ':' + pw) };
-      env.store.append('rsv', fromRec(rec));
-      bump(env);
-      releaseHolds(env, show.id, me, seats);
-      out = { ok: true, id: id, show: show.id, showLabel: showLabel(show.id), seats: seats, status: ST.WAIT, rec: rec };
+      rec = { id: id, createdAt: env.now(), show: show.id, seats: got.seats, status: ST.WAIT, name: name, org: org, phone: phone, email: email,
+        note: note, memo: got.apart ? env.now() + ' 확인 필요: 휠체어 동행인 일부가 2층 (1층 자리 없음)' : '', arrivedAt: '', decidedAt: '', mailLog: '',
+        pw: salt + '$' + env.sha256(salt + ':' + pw), req: tag };
+      addRec(env, rec);                                                   // 이 줄이 저장돼야 접수
+      env.props.set(sideKey(show.id), side === 'L' ? 'R' : 'L');          // 저장된 뒤에만 차례를 넘김
+      out = bookResult(rec);
     });
-    if (!out.ok) return out;
-    env.cache.put(rl, String(n + 1), 3600);
-    var rec = out.rec; delete out.rec;
-    mailAdmin(env, '[좌석 예약 신청] ' + showLabel(rec.show) + ' · ' + rec.name + ' · ' + rec.seats.length + '석', rec, '새 좌석 예약 신청이 들어왔습니다. (승인 대기)');
-    var merr = mailReceived(env, rec);
+    if (!out.ok || out.again) return out;
+    try { env.cache.put(rl, String(+(env.cache.get(rl) || 0) + 1), 3600); } catch (e) {}
+    // 여기부터는 예약 저장과 따로: 실패해도 예약은 그대로
+    var aerr = mailAdmin(env, '[좌석 예약 신청] ' + showLabel(rec.show) + ' · ' + rec.name + ' · ' + rec.seats.length + '석', rec, '새 좌석 예약 신청이 들어왔습니다. (승인 대기)' + (rec.memo ? '\n' + rec.memo : ''));
+    var merr = mailReceived(env, rec), at = env.now();
     out.mailed = !merr;
-    if (merr) logOn(env, rec.id, env.now() + ' 접수 메일', merr);   // 실패만 기록 (관리 화면에서 다시 보내기)
-    if (reqId) env.cache.put(rk, JSON.stringify(out), 1800);
+    logOn(env, rec.id, [[at + ' 담당자 알림', aerr], [at + ' 접수 메일', merr]]);
     return out;
   }
-  /* 예약 한 건의 메일 기록에 한 줄 더함 */
-  function logOn(env, id, what, err) {
+  /* 응답을 못 받았을 때 요청번호로 접수 결과 찾기 (개인정보는 돌려주지 않음) */
+  function bookStatus(req, env) {
+    var reqId = str(req.reqId).replace(/[^\w-]/g, '').slice(0, 60);
+    if (reqId.length < 16) return fail('invalid', '요청번호가 없어요.');
+    var x = readAll(env).filter(function (r) { return r.req && r.req.split(':')[0] === reqId; })[0];
+    return x ? Object.assign(bookResult(x, true), { found: true }) : { ok: true, found: false };
+  }
+  /* 예약 한 건의 메일 기록에 줄들을 더함: lines = [[무엇, 오류 문구('' 이면 성공)], …]. 고친 예약을 돌려줌 (실패하면 null) */
+  function logOn(env, id, lines) {
+    var got = null;
     try {
       env.lock(function () {
-        var recs = readAll(env), x = recs.filter(function (r) { return r.id === id; })[0];
-        if (x) { logMail(x, what, err); writeAll(env, recs); }
+        var x = readAll(env).filter(function (r) { return r.id === id; })[0];
+        if (!x) return;
+        lines.forEach(function (l) { logMail(x, l[0], l[1]); });
+        saveRecs(env, [x]);
+        got = x;
       });
-    } catch (e) {}
+    } catch (e) { if (typeof console !== 'undefined') console.error('메일 기록 실패 ' + id + ': ' + (e && e.message)); }
+    return got;
   }
 
   /* ---------- 손님: 내 예약 (이메일 + 비밀번호) ---------- */
@@ -490,11 +521,17 @@ var RSV = (function () {
     }
     return guestSession(env, email, ids);
   }
+  /* 로그인 세션에는 그 예약들의 비밀번호(암호화 값) 지문을 같이 둠 → 비밀번호를 바꾸면(본인 · 관리자) 예전 로그인은 끝남 */
+  function pwSig(env, recs, ids) {
+    var m = {}; recs.forEach(function (x) { m[x.id] = x.pw; });
+    return env.sha256(ids.map(function (id) { return m[id] || '-'; }).join('|')).slice(0, 16);
+  }
   function guestSession(env, email, ids) {
     var token = env.uuid() + env.uuid();
-    env.cache.put('rtok:' + token, JSON.stringify({ email: email, ids: ids }), 21600);
+    env.cache.put('rtok:' + token, JSON.stringify({ email: email, ids: ids, sig: pwSig(env, readAll(env), ids) }), 21600);
     return listMine({ token: token }, env, token);
   }
+  function guestLogout(req, env) { var t = str(req.token); if (t) env.cache.remove('rtok:' + t); return { ok: true }; }
 
   /* ---------- 비밀번호 찾기: 메일로 6자리 확인 번호(15분) → 새 비밀번호 ---------- */
   function makeCode(env) { return ('000000' + (parseInt(env.uuid().slice(0, 8), 16) % 1000000)).slice(-6); }
@@ -503,7 +540,7 @@ var RSV = (function () {
     var rk = 'rsvcodecnt:' + key, n = +(env.cache.get(rk) || 0);
     if (n >= 3) return fail('many', '확인 번호를 너무 여러 번 요청했어요. 1시간 뒤 다시 해 주세요.');
     var code = makeCode(env);
-    env.cache.put('rsvcode:' + key, JSON.stringify({ code: code, tries: 0 }), 900);
+    env.cache.put('rsvcode:' + key, JSON.stringify({ code: code, tries: 0, exp: nowMs(env) + 900e3 }), 900);
     env.cache.put(rk, String(n + 1), 3600);
     var err = send(env, to, subject, lines.concat(['', '확인 번호: ' + code, '', '15분 동안 쓸 수 있어요. 직접 요청하지 않았다면 이 메일은 무시해 주세요.', '예약 시스템(홈페이지) 문의: ' + EVENT.sysPhone]));
     return err ? fail('mail', '메일을 보내지 못했어요. 예약 시스템 문의 ' + EVENT.sysPhone + '로 연락 주세요.') : null;
@@ -511,36 +548,39 @@ var RSV = (function () {
   function checkCode(env, key, code) {
     var v = null;
     try { v = JSON.parse(env.cache.get('rsvcode:' + key) || 'null'); } catch (e) { v = null; }
-    if (!v) return fail('code', '확인 번호가 없거나 15분이 지났어요. 확인 번호를 다시 받아 주세요.');
+    var left = v ? Math.floor(((+v.exp || 0) - nowMs(env)) / 1000) : 0;
+    if (!v || left <= 0) { env.cache.remove('rsvcode:' + key); return fail('code', '확인 번호가 없거나 15분이 지났어요. 확인 번호를 다시 받아 주세요.'); }
     if (str(code).replace(/\D/g, '') !== v.code) {
       v.tries++;
       if (v.tries >= 5) { env.cache.remove('rsvcode:' + key); return fail('code', '확인 번호를 5번 틀렸어요. 확인 번호를 다시 받아 주세요.'); }
-      env.cache.put('rsvcode:' + key, JSON.stringify(v), 900);
+      env.cache.put('rsvcode:' + key, JSON.stringify(v), Math.max(1, left));   // 남은 시간 그대로 (늘리지 않음)
       return fail('code', '확인 번호가 맞지 않아요. 메일에 온 6자리 숫자를 넣어 주세요.', { errors: { code: '확인 번호가 맞지 않아요' } });
     }
     env.cache.remove('rsvcode:' + key);
     return null;
   }
-  /* 이메일 또는 휴대전화 번호로 예약을 찾아, 예약에 적힌 이메일로 확인 번호를 보냄 */
+  /* 이메일 또는 휴대전화 번호로 예약을 찾아, 예약에 적힌 이메일로 확인 번호를 보냄.
+     예약이 있든 없든 같은 답을 돌려줌 (다른 사람이 이메일·번호로 예약 여부를 알아낼 수 없게) */
   function guestForgot(req, env) {
     var email = normEmail(req.email), digits = str(req.phone).replace(/\D/g, '');
-    var recs = readAll(env).filter(function (x) { return x.pw && x.status !== ST.BLOCK; }), hit = null;
+    var recs = readAll(env).filter(function (x) { return x.pw && x.status !== ST.BLOCK; }), hit = null, byPhone = false;
     if (email) {
       if (!emailOk(email)) return fail('invalid', '이메일 주소를 확인해 주세요.', { errors: { email: '이메일 주소를 확인해 주세요' } });
       hit = recs.filter(function (x) { return x.email === email; })[0];
-      if (!hit) return fail('none', '이 이메일로 신청한 예약이 없어요. 예약할 때 적은 이메일이 다를 수 있어요. 아래 ‘휴대전화 번호로 찾기’를 눌러 보세요.');
     } else if (digits.length >= 9) {
+      byPhone = true;
       var fk = 'rsvphfail:' + digits, fails = +(env.cache.get(fk) || 0);
       if (fails >= 5) return fail('many', '여러 번 찾지 못했어요. 예약 시스템 문의 ' + EVENT.sysPhone + '로 연락 주세요.');
       hit = recs.filter(function (x) { return x.phone.replace(/\D/g, '') === digits; })[0];
-      if (!hit) { env.cache.put(fk, String(fails + 1), 3600); return fail('none', '이 번호로 신청한 예약이 없어요. 번호를 확인하시거나 예약 시스템 문의 ' + EVENT.sysPhone + '로 연락 주세요.'); }
-      email = hit.email;
-      env.cache.put('rsvcodeph:' + digits, email, 900);
+      if (hit) env.cache.put('rsvcodeph:' + digits, hit.email, 900);
+      else env.cache.put(fk, String(fails + 1), 3600);
     } else return fail('invalid', '예약할 때 적은 이메일이나 휴대전화 번호를 넣어 주세요.');
-    var bad = sendCode(env, 'g:' + email, email, '[' + EVENT.org + '] 좌석 예약 비밀번호 찾기 확인 번호', [
-      EVENT.series + ' 〈' + EVENT.title + '〉 좌석 예약의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.']);
-    if (bad) return bad;
-    return { ok: true, sentTo: maskEmail(email), byPhone: !req.email };
+    if (hit) {
+      var bad = sendCode(env, 'g:' + hit.email, hit.email, '[' + EVENT.org + '] 좌석 예약 비밀번호 찾기 확인 번호', [
+        EVENT.series + ' 〈' + EVENT.title + '〉 좌석 예약의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.']);
+      if (bad && bad.code === 'many') return bad;
+    }
+    return { ok: true, sentTo: byPhone ? '' : maskEmail(email), byPhone: byPhone };
   }
   function guestReset(req, env) {
     var email = normEmail(req.email), pw = str(req.password);
@@ -551,14 +591,13 @@ var RSV = (function () {
     if (bad) return bad;
     var ids = [];
     env.lock(function () {
-      var recs = readAll(env);
-      recs.forEach(function (x) {
-        if (x.email !== email || x.status === ST.BLOCK) return;
+      var mine = readAll(env).filter(function (x) { return x.email === email && x.status !== ST.BLOCK; });
+      mine.forEach(function (x) {
         var salt = env.uuid().slice(0, 12);
         x.pw = salt + '$' + env.sha256(salt + ':' + pw);
         ids.push(x.id);
       });
-      if (ids.length) writeAll(env, recs);
+      saveRecs(env, mine);
     });
     if (!ids.length) return fail('missing', '이 이메일로 신청한 예약을 찾지 못했어요.');
     env.cache.remove('rsvfail:' + email);
@@ -574,7 +613,9 @@ var RSV = (function () {
   function listMine(req, env, token) {
     var g = guest(req, env);
     if (!g) return fail('auth', '다시 로그인해 주세요.');
-    var list = sweptRecs(env).filter(function (x) { return g.ids.indexOf(x.id) >= 0 && x.email === g.email; }).map(mine);
+    var recs = sweptRecs(env);
+    if (g.sig !== pwSig(env, recs, g.ids)) { env.cache.remove('rtok:' + str(req.token)); return fail('auth', '비밀번호가 바뀌어서 다시 로그인해야 해요.'); }
+    var list = recs.filter(function (x) { return g.ids.indexOf(x.id) >= 0 && x.email === g.email; }).map(mine);
     var res = { ok: true, today: env.today(), now: env.now(), list: list, event: EVENT, arriveTest: settings(env).arriveTest };
     if (token) res.token = token;
     return res;
@@ -586,9 +627,10 @@ var RSV = (function () {
     if (g.ids.indexOf(id) < 0) return fail('missing', '예약을 찾을 수 없어요.');
     env.lock(function () {
       var recs = readAll(env), x = recs.filter(function (r) { return r.id === id; })[0];
+      if (g.sig !== pwSig(env, recs, g.ids)) { out = fail('auth', '비밀번호가 바뀌어서 다시 로그인해야 해요.'); return; }
       if (!x || x.email !== g.email) { out = fail('missing', '예약을 찾을 수 없어요.'); return; }
       out = fn(x);
-      if (out && out.ok) writeAll(env, recs);
+      if (out && out.ok) saveRecs(env, [x]);
     });
     if (out && out.ok) { out.item = mine(out.x); delete out.x; }
     return out;
@@ -616,22 +658,40 @@ var RSV = (function () {
     return res;
   }
 
-  /* ---------- 관리자 (홈페이지 관리자 비밀번호로 로그인한 토큰) ---------- */
-  /* 아이디·비밀번호로 관리 화면 들어가기. 5번 틀리면 15분 잠김 */
-  var ADMIN_SEC = 28800;
+  /* ---------- 관리자 (홈페이지 관리자 비밀번호로 로그인한 토큰) ----------
+     로그인은 6시간 (구글 캐시 최대 보관 시간). 열쇠 값에는 관리자 비밀번호 지문을 넣어 둠 → 비밀번호를 바꾸면 예전 로그인은 끝남.
+     비밀번호를 5번 틀리면 그 아이디만 15분 잠김 (없는 아이디로 틀려도 진짜 관리자는 잠기지 않음). */
+  var ADMIN_SEC = 21600;
+  var ADMIN_PW_MIN = 8;
+  /* 관리자 비밀번호 암호화: 'k1$' + SHA-256 을 1000번 되풀이 (예전 값은 한 번 → 맞으면 그대로 받아 줌) */
+  function adminHash(env, salt, pw) {
+    var h = env.sha256(salt + ':' + pw);
+    for (var i = 1; i < 1000; i++) h = env.sha256(salt + h);
+    return 'k1$' + h;
+  }
+  function adminPwOk(env, c, pw) {
+    if (!c || !c.hash) return false;
+    return c.hash.indexOf('k1$') === 0 ? adminHash(env, c.salt, pw) === c.hash : env.sha256(c.salt + ':' + pw) === c.hash;
+  }
+  function adminSig(env) { var c = env.adminCred ? env.adminCred() : null; return c && c.hash ? c.hash.slice(-16) : '1'; }
+  function adminToken(env) {
+    var token = env.uuid() + env.uuid();
+    env.cache.put('rsvadm:' + token, adminSig(env), ADMIN_SEC);
+    return token;
+  }
   function adminLogin(req, env) {
     if (!env.adminCred || !env.sha256) return fail('off', '아이디 로그인이 준비되지 않았어요.');
-    var fails = +(env.cache.get('rsvadmfail') || 0);
-    if (fails >= 5) return fail('locked', '비밀번호를 여러 번 틀려서 15분 동안 잠겼어요. 잠시 뒤 다시 해 주세요.');
-    var c = env.adminCred(), id = clean(req.id, 60).toLowerCase(), pw = str(req.password);
-    if (!c || !c.id || id !== str(c.id).toLowerCase() || env.sha256(c.salt + ':' + pw) !== c.hash) {
-      env.cache.put('rsvadmfail', String(fails + 1), 900);
+    var id = clean(req.id, 60).toLowerCase(), pw = str(req.password);
+    var fk = 'rsvadmfail:' + env.sha256(id).slice(0, 16), fails = +(env.cache.get(fk) || 0), all = +(env.cache.get('rsvadmfailall') || 0);
+    if (fails >= 5 || all >= 50) return fail('locked', '비밀번호를 여러 번 틀려서 15분 동안 잠겼어요. 잠시 뒤 다시 해 주세요.');
+    var c = env.adminCred();
+    if (!c || !c.id || id !== str(c.id).toLowerCase() || !adminPwOk(env, c, pw)) {
+      env.cache.put(fk, String(fails + 1), 900);
+      env.cache.put('rsvadmfailall', String(all + 1), 900);
       return fail('login', '아이디나 비밀번호가 맞지 않아요.' + (fails >= 2 ? ' (' + (4 - fails) + '번 더 틀리면 15분 동안 잠겨요)' : ''));
     }
-    env.cache.remove('rsvadmfail');
-    var token = env.uuid() + env.uuid();
-    env.cache.put('rsvadm:' + token, '1', ADMIN_SEC);
-    return { ok: true, token: token };
+    env.cache.remove(fk);
+    return { ok: true, token: adminToken(env) };
   }
   /* 관리자 비밀번호 찾기: 확인 번호를 담당자 알림 메일로 보냄 */
   function adminForgot(req, env) {
@@ -644,29 +704,31 @@ var RSV = (function () {
   }
   function adminReset(req, env) {
     var pw = str(req.password);
-    if (pw.length < 4 || pw.length > 60) return fail('invalid', '새 비밀번호는 4~60자로 정해 주세요.', { errors: { password: '4~60자로 정해 주세요' } });
+    if (pw.length < ADMIN_PW_MIN || pw.length > 60) return fail('invalid', '새 비밀번호는 ' + ADMIN_PW_MIN + '~60자로 정해 주세요.', { errors: { password: ADMIN_PW_MIN + '~60자로 정해 주세요' } });
     var bad = checkCode(env, 'admin', req.code);
     if (bad) return bad;
     var c = env.adminCred() || {}, salt = env.uuid().slice(0, 16);
-    env.setAdminCred({ id: c.id || 'admin', salt: salt, hash: env.sha256(salt + ':' + pw) });
-    env.cache.remove('rsvadmfail');
-    var token = env.uuid() + env.uuid();
-    env.cache.put('rsvadm:' + token, '1', ADMIN_SEC);
-    return { ok: true, token: token, id: c.id };
+    env.setAdminCred({ id: c.id || 'admin', salt: salt, hash: adminHash(env, salt, pw) });
+    env.cache.remove('rsvadmfail:' + env.sha256(str(c.id || 'admin').toLowerCase()).slice(0, 16));
+    return { ok: true, token: adminToken(env), id: c.id };
   }
 
   function adminSetCred(req, env) {
     if (!env.setAdminCred) return fail('off', '바꿀 수 없어요.');
     var id = clean(req.id, 40), pw = str(req.password), errors = {};
     if (!/^[A-Za-z0-9._@-]{3,40}$/.test(id)) errors.id = '아이디는 영문·숫자·.-_@ 3~40자로 정해 주세요';
-    if (pw.length < 4 || pw.length > 60) errors.password = '비밀번호는 4~60자로 정해 주세요';
+    if (pw.length < ADMIN_PW_MIN || pw.length > 60) errors.password = '비밀번호는 ' + ADMIN_PW_MIN + '~60자로 정해 주세요';
     if (Object.keys(errors).length) return fail('invalid', '입력한 내용을 확인해 주세요.', { errors: errors });
     var salt = env.uuid().slice(0, 16);
-    env.setAdminCred({ id: id, salt: salt, hash: env.sha256(salt + ':' + pw) });
-    return { ok: true, id: id };
+    env.setAdminCred({ id: id, salt: salt, hash: adminHash(env, salt, pw) });
+    return { ok: true, id: id, token: adminToken(env) };   // 다른 곳의 예전 로그인은 끝나고, 바꾼 사람은 새 열쇠로 계속
   }
+  function adminLogout(req, env) { env.cache.remove('rsvadm:' + str(req.token)); return { ok: true }; }
 
-  function isAdmin(req, env) { var t = str(req.token); return !!t && !!env.isAdmin && !!env.isAdmin(t); }
+  function isAdmin(req, env) {
+    var t = str(req.token), v = t && /^[a-f0-9]{32,}$/.test(t) ? env.cache.get('rsvadm:' + t) : null;
+    return !!v && v === adminSig(env);
+  }
   function adminData(env) {
     var cfg = settings(env), recs = sweptRecs(env), occ = occupancy(recs), quota = null, mailVia = null, sheetUrl = '';
     try { if (env.mailQuota) quota = env.mailQuota(); } catch (e) {}
@@ -676,19 +738,30 @@ var RSV = (function () {
       ok: true, now: env.now(), today: env.today(), ver: env.props.get('RSV_VER') || '0', settings: cfg, event: EVENT,
       notifyEmail: notifyTo(env), mailQuota: quota, mailVia: mailVia, sheetUrl: sheetUrl, adminId: env.adminCred ? str((env.adminCred() || {}).id) : '',
       shows: EVENT.shows.map(function (s) { return showState(s, env, cfg, occ); }),
-      holds: holdMap(env, ''),
       list: recs.map(adminView).reverse()
     };
   }
+  function findRec(env, id) { return readAll(env).filter(function (r) { return r.id === id; })[0] || null; }
+  /* 예약 한 건 고치기: 잠금 안에서 그 줄만 저장. fn 이 { ok, x, mail: function(x) → [무엇, 오류] } 를 돌려주면
+     저장한 뒤(잠금 밖) 메일을 보내고 메일 기록을 따로 남김 → 메일이 늦거나 실패해도 상태 변경은 이미 저장됨 */
   function adminUpdate(req, env, fn) {
     var id = str(req.id), out = null;
     env.lock(function () {
       var recs = readAll(env), x = recs.filter(function (r) { return r.id === id; })[0];
       if (!x) { out = fail('missing', '예약을 찾을 수 없어요. 새로고침해 주세요.'); return; }
       out = fn(x, recs);
-      if (out && out.ok) writeAll(env, recs);
+      if (out && out.ok) saveRecs(env, [x]);
     });
-    if (out && out.ok) { out.item = adminView(out.x); delete out.x; }
+    if (!out || !out.ok) return out;
+    var x = out.x, mail = out.mail;
+    delete out.x; delete out.mail;
+    if (mail) {
+      var m = mail(x);
+      out.mailed = !m[1];
+      x = logOn(env, x.id, [m]) || x;
+      if (m[1]) out.mailError = m[1];
+    }
+    out.item = adminView(x);
     return out;
   }
   function freeFor(x, recs) {
@@ -707,34 +780,39 @@ var RSV = (function () {
         }
         var was = x.status;
         x.status = d === 'approve' ? ST.OK : ST.WAIT; x.decidedAt = env.now();
-        if (d === 'approve' && was !== ST.OK) logMail(x, env.now() + ' 확정 메일', mailConfirm(env, x));
-        return { ok: true, x: x };
+        var r = { ok: true, x: x };
+        if (d === 'approve' && was !== ST.OK && x.email) r.mail = function (y) { return [env.now() + ' 확정 메일', mailConfirm(env, y)]; };
+        return r;
       }
       if (d === 'reject' || d === 'cancel') {
+        if (x.status !== ST.WAIT && x.status !== ST.OK) return fail('status', '이미 처리된 예약이에요. 새로고침해 주세요.');
         x.status = d === 'reject' ? ST.NO : ST.CANCEL; x.decidedAt = env.now();
         if (reason) x.memo = clean((x.memo ? x.memo + '\n' : '') + env.now() + ' ' + reason, 500);
-        if (d === 'reject' && req.notify !== false) logMail(x, env.now() + ' 거절 안내 메일', mailReject(env, x, reason));
-        return { ok: true, x: x };
+        var r2 = { ok: true, x: x };
+        if (d === 'reject' && req.notify !== false && x.email) r2.mail = function (y) { return [env.now() + ' 거절 안내 메일', mailReject(env, y, reason)]; };
+        return r2;
       }
       return fail('decision', '알 수 없는 처리예요.');
     });
   }
+  /* 메일 다시 보내기: 상태는 바꾸지 않고 보낸 결과만 기록 (실패도 기록) */
   function resend(req, env) {
-    return adminUpdate(req, env, function (x) {
-      if (x.status === ST.WAIT) {   // 승인 대기: 신청 접수 메일을 다시
-        var e0 = mailReceived(env, x);
-        logMail(x, env.now() + ' 접수 메일(다시)', e0);
-        return e0 ? fail('mail', e0) : { ok: true, x: x };
-      }
-      if (x.status !== ST.OK) return fail('status', '승인 대기나 확정된 예약만 메일을 다시 보낼 수 있어요.');
-      var err = mailConfirm(env, x);
-      logMail(x, env.now() + ' 확정 메일(다시)', err);
-      return err ? fail('mail', err) : { ok: true, x: x };
-    });
+    var x = findRec(env, str(req.id));
+    if (!x) return fail('missing', '예약을 찾을 수 없어요. 새로고침해 주세요.');
+    if (!x.email) return fail('mail', '이메일이 없는 예약이에요.');
+    var m = x.status === ST.WAIT ? [env.now() + ' 접수 메일(다시)', mailReceived(env, x)]
+      : x.status === ST.OK ? [env.now() + ' 확정 메일(다시)', mailConfirm(env, x)] : null;
+    if (!m) return fail('status', '승인 대기나 확정된 예약만 메일을 다시 보낼 수 있어요.');
+    var y = logOn(env, x.id, [m]) || x;
+    return m[1] ? fail('mail', m[1], { item: adminView(y) }) : { ok: true, item: adminView(y) };
   }
+  /* 관리자 도착 처리: 확정된 예약만, 공연 당일(또는 도착 확인 시험 중)에만. 도착 취소는 언제나 */
   function adminArrive(req, env) {
     return adminUpdate(req, env, function (x) {
-      x.arrivedAt = req.arrived === false ? '' : (x.arrivedAt || env.now());
+      if (req.arrived === false) { x.arrivedAt = ''; return { ok: true, x: x }; }
+      if (x.status !== ST.OK) return fail('status', '확정된 예약만 도착 처리할 수 있어요.');
+      if (!canArrive(env, x)) return fail('day', '도착 처리는 공연 당일(' + dateLabel(x.show) + ')에 할 수 있어요. 미리 해 보려면 ‘도착 확인 시험 모드’를 켜 주세요.');
+      x.arrivedAt = x.arrivedAt || env.now();
       return { ok: true, x: x };
     });
   }
@@ -761,15 +839,14 @@ var RSV = (function () {
     if (pw.length < 4 || pw.length > 30) return fail('invalid', '비밀번호는 4~30자로 정해 주세요.');
     return adminUpdate(req, env, function (x) {
       var salt = env.uuid().slice(0, 12);
-      x.pw = salt + '$' + env.sha256(salt + ':' + pw);
+      x.pw = salt + '$' + env.sha256(salt + ':' + pw);   // 예약자의 예전 로그인은 끝남 (세션의 비밀번호 지문이 달라짐)
       return { ok: true, x: x };
     });
   }
   function adminRemove(req, env) {
     var id = str(req.id), done = false;
     env.lock(function () {
-      var recs = readAll(env), rest = recs.filter(function (r) { return r.id !== id; });
-      if (rest.length !== recs.length) { writeAll(env, rest); done = true; }
+      if (readAll(env).some(function (r) { return r.id === id; })) { removeRecs(env, [id]); done = true; }
     });
     return done ? { ok: true } : fail('missing', '예약을 찾을 수 없어요.');
   }
@@ -787,7 +864,7 @@ var RSV = (function () {
       if (pw && !email) errors.email = '비밀번호를 정하려면 이메일도 적어 주세요';
     }
     if (Object.keys(errors).length) return fail('invalid', '입력한 내용을 확인해 주세요.', { errors: errors });
-    var out = null;
+    var out = null, rec = null;
     env.lock(function () {
       var recs = readAll(env), occ = occupancy(recs)[show.id];
       var taken = seats.filter(function (s) { return occ[s]; });
@@ -796,49 +873,65 @@ var RSV = (function () {
       var id;
       do { id = (kind === ST.BLOCK ? 'X' : 'R') + show.id.slice(5).replace('-', '') + '-' + env.uuid().slice(0, 4).toUpperCase(); } while (ids[id]);
       var salt = env.uuid().slice(0, 12);
-      var rec = { id: id, createdAt: env.now(), show: show.id, seats: seats, status: kind, name: name, org: clean(req.org, 60), phone: phone, email: email,
+      rec = { id: id, createdAt: env.now(), show: show.id, seats: seats, status: kind, name: name, org: clean(req.org, 60), phone: phone, email: email,
         note: clean(req.note, 300), memo: kind === ST.OK ? '관리자 등록' : '', arrivedAt: '', decidedAt: env.now(), mailLog: '',
-        pw: pw ? salt + '$' + env.sha256(salt + ':' + pw) : '' };
-      if (kind === ST.OK && email && req.notify !== false) logMail(rec, env.now() + ' 확정 메일', mailConfirm(env, rec));
-      recs.push(rec);
-      writeAll(env, recs);
-      releaseHolds(env, show.id, '', seats);
-      out = { ok: true, item: adminView(rec) };
+        pw: pw ? salt + '$' + env.sha256(salt + ':' + pw) : '', req: '' };
+      addRec(env, rec);
+      out = { ok: true };
     });
+    if (!out.ok) return out;
+    if (kind === ST.OK && email && req.notify !== false) {   // 저장한 뒤 확정 메일
+      var err = mailConfirm(env, rec);
+      out.mailed = !err;
+      rec = logOn(env, rec.id, [[env.now() + ' 확정 메일', err]]) || rec;
+    }
+    out.item = adminView(rec);
     return out;
   }
-  /* 예약 전체 초기화: 모두 보관 탭으로 옮기고 좌석을 비움 (지우지 않음) */
+  /* 예약 초기화: 예약을 보관 탭으로 옮긴 뒤 이 탭에서 뺌 (지우지 않음).
+     막아 둔 좌석(관계자석 · 예약 불가)은 그대로 둠 — blocks: true 일 때만 막음도 함께 풂.
+     보관 탭에는 비밀번호(암호화 값)는 옮기지 않음 */
   function resetAll(req, env) {
     if (req.confirm !== '초기화') return fail('confirm', '‘초기화’라고 적어 주세요.');
     if (!env.archive) return fail('off', '보관 기능이 준비되지 않았어요.');
-    var moved = 0;
+    var moved = 0, kept = 0;
     env.lock(function () {
-      var recs = readAll(env);
-      if (recs.length) env.archive(recs.map(fromRec), env.now());
-      moved = recs.length;
-      writeAll(env, []);
+      var recs = readAll(env), go = recs.filter(function (x) { return req.blocks === true || x.status !== ST.BLOCK; });
+      kept = recs.length - go.length;
+      if (go.length) {
+        env.archive(go.map(function (x) { var o = fromRec(x); o.pw = ''; o.req = ''; return o; }), env.now());   // 보관이 실패하면 여기서 멈춤 (예약은 그대로)
+        removeRecs(env, go.map(function (x) { return x.id; }));
+      }
+      moved = go.length;
     });
     EVENT.shows.forEach(function (s) { env.props.set(sideKey(s.id), 'L'); });   // 자동 배정 차례도 처음(왼쪽)부터
     env.props.set('RSV_ARRIVE_TEST', '0');
-    return { ok: true, moved: moved };
+    var cfg = settings(env), occ = occupancy(readAll(env));
+    return { ok: true, moved: moved, kept: kept, shows: EVENT.shows.map(function (s) { return showState(s, env, cfg, occ); }) };
+  }
+  /* 설정 저장: 모두 확인한 뒤 한꺼번에 저장 (하나라도 틀리면 아무것도 바꾸지 않음) */
+  function realAt(at) {
+    var m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(at);
+    if (!m) return false;
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]));
+    return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] && d.getUTCHours() === +m[4] && d.getUTCMinutes() === +m[5];
   }
   function saveSettings(req, env) {
-    if (req.open !== undefined) env.props.set('RSV_OPEN', req.open ? '1' : '0');
+    var set = {};
+    if (req.open !== undefined) set.RSV_OPEN = req.open ? '1' : '0';
     if (req.max !== undefined) {
       var n = parseInt(req.max, 10);
-      if (isNaN(n) || n < 1 || n > 242) return fail('invalid', '최대 인원은 1~242 사이 숫자로 적어 주세요.');
-      env.props.set('RSV_MAX2', String(n));
+      if (isNaN(n) || n < 1 || n > 242 || String(n) !== str(req.max).trim()) return fail('invalid', '최대 인원은 1~242 사이 숫자로 적어 주세요.');
+      set.RSV_MAX2 = String(n);
     }
     if (req.openAt !== undefined) {
       var at = str(req.openAt).replace('T', ' ').slice(0, 16);
-      if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(at)) return fail('invalid', '예약 오픈 일시를 확인해 주세요. (예: 2026-11-04 10:00)');
-      env.props.set('RSV_OPEN_AT', at);
+      if (!realAt(at)) return fail('invalid', '예약 오픈 일시를 확인해 주세요. (예: 2026-11-04 10:00)');
+      set.RSV_OPEN_AT = at;
     }
-    var cleared = 0;
-    if (req.arriveTest !== undefined) {
-      env.props.set('RSV_ARRIVE_TEST', req.arriveTest ? String(nowMs(env) + ARRIVE_TEST_MS) : '0');
-      if (!req.arriveTest) cleared = clearTestArrivals(env);
-    }
+    if (req.arriveTest !== undefined) set.RSV_ARRIVE_TEST = req.arriveTest ? String(nowMs(env) + ARRIVE_TEST_MS) : '0';
+    for (var k in set) env.props.set(k, set[k]);
+    var cleared = req.arriveTest === false ? clearTestArrivals(env) : 0;
     bump(env);
     return { ok: true, settings: settings(env), cleared: cleared };
   }
@@ -851,12 +944,14 @@ var RSV = (function () {
       var a = str(req.action);
       if (a === 'rsvState') {
         var st = publicState(env), cf = settings(env);
-        st.holds = holdMap(env, str(req.holder));
         st.max = cf.max; st.openAt = cf.openAt; st.openAtLabel = cf.openAtLabel; st.notYet = cf.notYet;   // 캐시와 상관없이 지금 기준
+        st.ms = nowMs(env);   // 서버 시계 (화면의 남은 시간을 서버 기준으로 셈)
         return st;
       }
-      if (a === 'rsvHold') return hold(req, env);
+      if (a === 'rsvHold') return fail('old', '예약 화면이 새로 바뀌었어요. 화면을 새로고침(⟳)한 뒤 다시 신청해 주세요.');
       if (a === 'rsvBook') return book(req, env);
+      if (a === 'rsvBookStatus') return bookStatus(req, env);
+      if (a === 'rsvLogout') return guestLogout(req, env);
       if (a === 'rsvLogin') return guestLogin(req, env);
       if (a === 'rsvForgot') return guestForgot(req, env);
       if (a === 'rsvReset') return guestReset(req, env);
@@ -881,6 +976,7 @@ var RSV = (function () {
           case 'rsvAdminBook': return adminBook(req, env);
           case 'rsvAdminSettings': return saveSettings(req, env);
           case 'rsvAdminCred': return adminSetCred(req, env);
+          case 'rsvAdminLogout': return adminLogout(req, env);
         }
       }
       return fail('action', '알 수 없는 요청입니다.');
@@ -891,7 +987,7 @@ var RSV = (function () {
   }
 
   return {
-    EVENT: EVENT, HOLD_SEC: HOLD_SEC, assignSeats: assignSeats, BLOCK: BLOCK, autoPick: autoPick, seatGroups: seatGroups, ROWS: ROWS, SIDES: SIDES, WHEEL: WHEEL, SEATS: SEATS, ST: ST, STATUSES: STATUSES, SCHEMA: SCHEMA,
+    EVENT: EVENT, API_V: API_V, adminSig: adminSig, assignSeats: assignSeats, BLOCK: BLOCK, autoPick: autoPick, seatGroups: seatGroups, ROWS: ROWS, SIDES: SIDES, WHEEL: WHEEL, SEATS: SEATS, ST: ST, STATUSES: STATUSES, SCHEMA: SCHEMA,
     rowNums: rowNums, floorOf: floorOf, seatName: seatName, seatWhere: seatWhere, seatSort: seatSort, showLabel: showLabel, dateLabel: dateLabel, timeLabel: timeLabel, findShow: findShow,
     handle: handle
   };

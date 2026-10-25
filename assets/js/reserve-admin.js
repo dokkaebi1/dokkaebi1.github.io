@@ -1,5 +1,5 @@
 /* 좌석 예약 관리: 신청 승인 · 좌석 배치도(막기·전화 예약 등록) · 공연 당일 입장(도착) · 설정
-   들어오는 법: ① 이 화면에서 아이디·비밀번호 (8시간)
+   들어오는 법: ① 이 화면에서 아이디·비밀번호 (6시간)
               ② 관리자(구글 로그인) → '좌석 예약 관리' → 관리 열쇠(6시간)가 주소(#k=...)로 넘어옴 */
 (function () {
   'use strict';
@@ -33,7 +33,7 @@
       + '<label class="rv-fld"><span>새 비밀번호 확인</span><input name="password2" type="password" autocomplete="new-password"></label>'
       + '<p class="rv-err" role="alert"></p>'
       + '<button class="rv-btn rv-btn-ink rv-btn-wide" type="submit">비밀번호 바꾸고 들어가기</button></form>'
-      + '<p class="rv-sub" style="margin:0;font-size:14px">한 번 들어오면 8시간 동안 쓸 수 있어요. 비밀번호를 5번 틀리면 15분 동안 잠겨요.</p>'
+      + '<p class="rv-sub" style="margin:0;font-size:14px">한 번 들어오면 6시간 동안 쓸 수 있어요. 비밀번호를 5번 틀리면 15분 동안 잠겨요. 다 쓰면 오른쪽 위 ‘로그아웃’을 눌러 주세요.</p>'
       + (ENTRY ? '<p class="rv-sub" style="margin:0;font-size:14px">극단 도깨비 구글 계정이 있으면 <a href="' + esc(ENTRY) + '">구글 로그인으로 들어가기</a></p>' : '')
       + '</div>';
     var f = U.$('form[data-login]', root);
@@ -80,13 +80,19 @@
   function frame() {
     root.innerHTML = '<div class="ad-top"><div><span class="rv-eyebrow">관리자</span><h1 class="rv-h2" style="margin:6px 0 0">좌석 예약 관리</h1>'
       + '<p class="rv-sub" style="margin:4px 0 0">' + esc(R.EVENT.series) + ' 〈' + esc(R.EVENT.title) + '〉 · ' + esc(R.EVENT.venue) + '</p></div>'
-      + '<span class="rv-live" id="ad-live"><i></i><span>불러오는 중</span></span></div>'
+      + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="rv-live" id="ad-live"><i></i><span>불러오는 중</span></span>'
+      + '<button type="button" class="rv-btn rv-btn-line rv-btn-sm" data-logout>로그아웃</button></div></div>'
       + '<div class="ad-tabs" role="tablist">'
       + [['list', '신청 관리'], ['map', '좌석 배치도'], ['gate', '당일 입장'], ['set', '설정']].map(function (t) {
         return '<button type="button" role="tab" data-tab="' + t[0] + '">' + t[1] + '<b data-cnt="' + t[0] + '"></b></button>';
       }).join('') + '</div><div id="ad-body"></div>';
   }
 
+  /* 손님 자동 배정에 쓸 수 있는 남은 좌석 (일반석 · 휠체어석) */
+  function leftNote(show) {
+    var x = (S.data.shows || []).filter(function (s) { return s.id === show; })[0];
+    return x && x.leftGen != null ? ' · 손님 배정 가능: 일반석 ' + x.leftGen + ' · 휠체어석 ' + x.leftWheel : '';
+  }
   function stats(show) {
     var o = { wait: 0, ok: 0, block: 0, arr: 0, okN: 0, arrN: 0 };
     S.data.list.forEach(function (x) {
@@ -205,7 +211,7 @@
     var st = stats(S.show);
     body.innerHTML = showChips(S.show, false)
       + '<div class="ad-split"><div class="rv-board"><div class="rv-boardhead">' + U.legend('admin')
-      + '<span class="rv-sub" style="margin:0;font-size:14px">확정 ' + st.ok + '석 · 대기 ' + st.wait + '석 · 막음 ' + st.block + '석 · <b>남음 ' + st.left + '석</b></span></div>'
+      + '<span class="rv-sub" style="margin:0;font-size:14px">확정 ' + st.ok + '석 · 대기 ' + st.wait + '석 · 막음 ' + st.block + '석 · <b>남음 ' + st.left + '석</b>' + leftNote(show) + '</span></div>'
       + '<div class="rv-scroll"><div id="ad-hall"></div></div><p class="rv-hint">좌우로 밀어서 보세요</p></div>'
       + '<aside class="ad-side" id="ad-side"></aside></div>';
     S.map = U.hall(U.$('#ad-hall'), { admin: true, onPick: function (id) {
@@ -288,11 +294,11 @@
       + '<label class="rv-fld" style="max-width:320px"><span>아이디</span><input name="id" value="' + esc(d.adminId || '') + '" autocomplete="username" autocapitalize="off" spellcheck="false"></label>'
       + '<div class="rv-two"><label class="rv-fld"><span>새 비밀번호</span><input name="password" type="password" autocomplete="new-password"></label>'
       + '<label class="rv-fld"><span>새 비밀번호 확인</span><input name="password2" type="password" autocomplete="new-password"></label></div>'
-      + '<p class="rv-sub" style="margin:0;font-size:14px">예약자 이름·연락처를 보는 화면이라 8자 넘게, 숫자만이 아닌 비밀번호를 권해요. 바꾸면 다른 사람에게도 새 비밀번호를 알려 주세요.</p>'
+      + '<p class="rv-sub" style="margin:0;font-size:14px">비밀번호는 8자 이상이어야 해요 (숫자만이 아닌 것을 권해요). 바꾸면 다른 곳에 로그인돼 있던 화면은 모두 다시 로그인해야 해요.</p>'
       + '<p class="rv-err" role="alert"></p>'
       + '<button class="rv-btn rv-btn-ink rv-btn-sm" type="submit" style="justify-self:start">아이디·비밀번호 저장</button></form></div>'
       + '<div class="rv-card" style="max-width:640px;margin-top:16px;gap:10px;border-color:#E9B7A9"><b>예약 전체 초기화 (시험 정리용)</b>'
-      + '<p class="rv-sub" style="margin:0;font-size:15px">지금 있는 예약을 모두 구글 시트의 ‘좌석예약 보관’ 탭으로 옮기고 좌석을 전부 비워요. 지워지지 않고 보관 탭에 남아요. 손님 예약을 받기 시작한 뒤에는 누르지 마세요.</p>'
+      + '<p class="rv-sub" style="margin:0;font-size:15px">지금 있는 예약을 구글 시트의 ‘좌석예약 보관’ 탭으로 옮기고 좌석을 비워요. 지워지지 않고 보관 탭에 남아요(비밀번호는 옮기지 않아요). 막아 둔 좌석(예약 불가·관계자석)은 그대로 둬요. 손님 예약을 받기 시작한 뒤에는 누르지 마세요.</p>'
       + '<button type="button" class="rv-btn rv-btn-line rv-btn-sm" style="justify-self:start" data-reset-all>예약 전체 초기화</button></div>'
       + '<dl class="ad-dl ad-info">'
       + '<div><dt>새 신청 알림 메일</dt><dd>' + esc(d.notifyEmail || '(없음)') + ' <small>바꾸려면 기존 관리자 페이지 › 설정</small></dd></div>'
@@ -307,12 +313,12 @@
   }
 
   /* ---------- 처리 ---------- */
-  var lockedBtns = [];   // 처리하는 동안 잠근 단추 (실패해도 다시 켬)
-  function after(r, okMsg) {
-    lockedBtns.splice(0).forEach(function (b) { b.disabled = false; });
-    if (!r.ok) { U.toast(r.message, true); return; }
-    var bad = r.item && /✗/.test((r.item.mailLog || '').split('\n').pop());
-    U.toast(bad ? '처리했지만 메일은 보내지 못했어요. (메일 기록 확인)' : okMsg, bad);
+  /* 처리 결과: 이 요청이 잠근 단추만 다시 켬 (다른 처리 중인 단추는 그대로 잠김) */
+  function after(r, okMsg, btn) {
+    if (btn) btn.disabled = false;
+    if (!r.ok) { U.toast(r.message, true); if (r.item) load(); return; }
+    var bad = r.mailed === false;
+    U.toast(bad ? '처리는 저장했지만 메일은 보내지 못했어요. (메일 기록 확인 · 다시 보내기)' : okMsg, bad);
     load();
   }
   function promptBox(title, label, opts) {
@@ -322,7 +328,7 @@
       d.innerHTML = '<form class="in" novalidate><header><h2>' + esc(title) + '</h2></header><div class="body">'
         + (opts.text ? '<p style="margin:0">' + esc(opts.text) + '</p>' : '')
         + '<label class="rv-fld"><span>' + esc(label) + '</span><input name="v" maxlength="300"' + (opts.type ? ' type="' + opts.type + '"' : '') + '></label>'
-        + (opts.check ? '<label class="rv-consent"><input type="checkbox" name="c" checked> <span>' + esc(opts.check) + '</span></label>' : '')
+        + (opts.check ? '<label class="rv-consent"><input type="checkbox" name="c"' + (opts.checkOff ? '' : ' checked') + '> <span>' + esc(opts.check) + '</span></label>' : '')
         + '</div><footer><button type="button" class="rv-btn rv-btn-line" data-no>닫기</button><button type="submit" class="rv-btn rv-btn-red">' + esc(opts.ok || '확인') + '</button></footer></form>';
       document.body.appendChild(d);
       var f = U.$('form', d);
@@ -355,30 +361,30 @@
   }
   function act(name, id, btn) {
     var x = byId(id); if (!x) return;
-    var lock = function () { if (btn) { btn.disabled = true; lockedBtns.push(btn); } };
-    if (name === 'approve') { lock(); call('rsvAdminDecide', { id: id, decision: 'approve' }).then(function (r) { after(r, x.email ? '확정하고 확정 메일을 보냈어요.' : '확정했어요.'); }); }
-    if (name === 'wait') { lock(); call('rsvAdminDecide', { id: id, decision: 'wait' }).then(function (r) { after(r, '승인 대기로 되돌렸어요.'); }); }
+    var lock = function () { if (btn) btn.disabled = true; };
+    if (name === 'approve') { lock(); call('rsvAdminDecide', { id: id, decision: 'approve' }).then(function (r) { after(r, x.email ? '확정하고 확정 메일을 보냈어요.' : '확정했어요.', btn); }); }
+    if (name === 'wait') { lock(); call('rsvAdminDecide', { id: id, decision: 'wait' }).then(function (r) { after(r, '승인 대기로 되돌렸어요.', btn); }); }
     if (name === 'reject') promptBox('예약 거절', '거절 이유 (예약자에게 메일로 안내돼요, 비워도 돼요)', { check: '예약자에게 안내 메일 보내기', ok: '거절하기' }).then(function (v) {
       if (!v) return; lock();
-      call('rsvAdminDecide', { id: id, decision: 'reject', reason: v.value, notify: v.check }).then(function (r) { after(r, '거절했어요. 좌석이 다시 열렸어요.'); });
+      call('rsvAdminDecide', { id: id, decision: 'reject', reason: v.value, notify: v.check }).then(function (r) { after(r, '거절했어요. 좌석이 다시 열렸어요.', btn); });
     });
     if (name === 'cancel') U.confirm('확정 예약을 취소할까요?', x.name + ' · ' + x.seats.join(', ') + '\n좌석이 다시 열려요. 예약자에게는 메일이 가지 않으니 따로 연락해 주세요.', '예약 취소', true).then(function (y) {
-      if (!y) return; lock(); call('rsvAdminDecide', { id: id, decision: 'cancel' }).then(function (r) { after(r, '예약을 취소했어요.'); });
+      if (!y) return; lock(); call('rsvAdminDecide', { id: id, decision: 'cancel' }).then(function (r) { after(r, '예약을 취소했어요.', btn); });
     });
-    if (name === 'resend') { lock(); call('rsvAdminResend', { id: id }).then(function (r) { after(r, x.status === R.ST.WAIT ? '신청 접수 메일을 다시 보냈어요.' : '확정 메일을 다시 보냈어요.'); }); }
-    if (name === 'arrive' || name === 'unarrive') { lock(); call('rsvAdminArrive', { id: id, arrived: name === 'arrive' }).then(function (r) { after(r, name === 'arrive' ? x.name + '님 도착 처리했어요.' : '도착을 취소했어요.'); }); }
+    if (name === 'resend') { lock(); call('rsvAdminResend', { id: id }).then(function (r) { after(r, x.status === R.ST.WAIT ? '신청 접수 메일을 다시 보냈어요.' : '확정 메일을 다시 보냈어요.', btn); }); }
+    if (name === 'arrive' || name === 'unarrive') { lock(); call('rsvAdminArrive', { id: id, arrived: name === 'arrive' }).then(function (r) { after(r, name === 'arrive' ? x.name + '님 도착 처리했어요.' : '도착을 취소했어요.', btn); }); }
     if (name === 'remove') U.confirm(x.status === R.ST.BLOCK ? '막음을 풀까요?' : '목록에서 지울까요?', x.seats.join(', ') + (x.status === R.ST.BLOCK ? '\n좌석이 다시 예약 가능해져요.' : '\n시트에서도 지워지고 되돌릴 수 없어요.'), x.status === R.ST.BLOCK ? '막음 풀기' : '지우기', true).then(function (y) {
-      if (!y) return; lock(); call('rsvAdminRemove', { id: id }).then(function (r) { if (S.focus === id) S.focus = null; after(r, x.status === R.ST.BLOCK ? '막음을 풀었어요.' : '지웠어요.'); });
+      if (!y) return; lock(); call('rsvAdminRemove', { id: id }).then(function (r) { if (S.focus === id) S.focus = null; after(r, x.status === R.ST.BLOCK ? '막음을 풀었어요.' : '지웠어요.', btn); });
     });
     if (name === 'edit') editBox(x).then(function (v) {
       if (!v) return;
       call('rsvAdminEdit', Object.assign({ id: id }, v)).then(function (r) {
         if (r.code === 'invalid') { U.toast(r.message + ' ' + Object.keys(r.errors).map(function (k) { return r.errors[k]; }).join(', '), true); return; }
-        after(r, '예약자 정보를 고쳤어요.' + (v.email !== x.email ? ' 바뀐 이메일로 내 예약 확인·비밀번호 찾기를 할 수 있어요.' : ''));
+        after(r, '예약자 정보를 고쳤어요.' + (v.email !== x.email ? ' 바뀐 이메일로 내 예약 확인·비밀번호 찾기를 할 수 있어요.' : ''), btn);
       });
     });
-    if (name === 'pw') promptBox('비밀번호 새로 정하기', '새 비밀번호 (4자 이상)', { text: x.name + ' (' + x.email + ')님 예약의 비밀번호를 바꿔요. 바꾼 비밀번호는 예약자에게 직접 알려 주세요.', ok: '바꾸기' }).then(function (v) {
-      if (!v) return; call('rsvAdminPassword', { id: id, password: v.value }).then(function (r) { after(r, '비밀번호를 바꿨어요.'); });
+    if (name === 'pw') promptBox('비밀번호 새로 정하기', '새 비밀번호 (4자 이상)', { text: x.name + ' (' + x.email + ')님 예약의 비밀번호를 바꿔요. 예약자가 로그인해 있던 화면은 다시 로그인해야 해요. 바꾼 비밀번호는 예약자에게 직접 알려 주세요.', ok: '바꾸기' }).then(function (v) {
+      if (!v) return; call('rsvAdminPassword', { id: id, password: v.value }).then(function (r) { after(r, '비밀번호를 바꿨어요.', btn); });
     });
   }
 
@@ -399,20 +405,30 @@
       });
       return;
     }
+    if (t.hasAttribute('data-logout')) {
+      t.disabled = true;
+      U.api('rsvAdminLogout', { token: S.token }).then(function () { locked('로그아웃했어요.'); });
+      return;
+    }
     if (t.hasAttribute('data-reset-all')) {
-      var n = S.data.list.length;
-      promptBox('예약 전체 초기화', '확인을 위해 ‘초기화’라고 적어 주세요', { text: '예약 ' + n + '건을 모두 ‘좌석예약 보관’ 탭으로 옮기고 좌석을 비워요. 손님에게 메일은 가지 않아요.', ok: '초기화하기' }).then(function (v) {
+      var nb = S.data.list.filter(function (x) { return x.status !== R.ST.BLOCK; }).length, nk = S.data.list.length - nb;
+      promptBox('예약 전체 초기화', '확인을 위해 ‘초기화’라고 적어 주세요', { text: '예약 ' + nb + '건을 ‘좌석예약 보관’ 탭으로 옮기고 좌석을 비워요. 막아 둔 좌석 ' + nk + '건은 그대로 둬요. 손님에게 메일은 가지 않아요.', check: '막아 둔 좌석(예약 불가·관계자석)도 함께 풀기', checkOff: true, ok: '초기화하기' }).then(function (v) {
         if (!v) return;
         if (v.value.trim() !== '초기화') { U.toast('‘초기화’라고 적어야 진행돼요.', true); return; }
-        call('rsvAdminResetAll', { confirm: '초기화' }).then(function (r) { S.focus = null; S.pick = []; after(r, '예약 ' + (r.moved || 0) + '건을 보관 탭으로 옮기고 좌석을 모두 비웠어요.'); });
+        t.disabled = true;
+        call('rsvAdminResetAll', { confirm: '초기화', blocks: !!v.check }).then(function (r) {
+          S.focus = null; S.pick = [];
+          var left = (r.shows || []).map(function (s) { return R.dateLabel(s.id).replace(/ \(.\)/, '') + ' ' + s.leftGen + '석'; }).join(' · ');
+          after(r, '예약 ' + (r.moved || 0) + '건을 보관 탭으로 옮겼어요' + (r.kept ? ' (막은 좌석 ' + r.kept + '건은 그대로)' : '') + '. 남은 일반석: ' + left, t);
+        });
       });
       return;
     }
     if (t.dataset.arriveTest) {
-      t.disabled = true; lockedBtns.push(t);
+      t.disabled = true;
       call('rsvAdminSettings', { arriveTest: t.dataset.arriveTest === 'on' }).then(function (r) {
         after(r, r.settings && r.settings.arriveTest ? '도착 확인 시험 모드를 켰어요 (' + r.settings.arriveTestUntil + '까지).'
-          : '도착 확인 시험 모드를 껐어요.' + (r.cleared ? ' 시험 도착 ' + r.cleared + '건을 ‘아직 안 옴’으로 되돌렸어요.' : ''));
+          : '도착 확인 시험 모드를 껐어요.' + (r.cleared ? ' 시험 도착 ' + r.cleared + '건을 ‘아직 안 옴’으로 되돌렸어요.' : ''), t);
       });
       return;
     }
@@ -475,13 +491,14 @@
         if (r.code === 'invalid') { U.fieldErrors(f, r.errors); return; }
         if (!r.ok) { U.toast(r.message, true); return; }
         U.fieldErrors(f, {}); f.elements.password.value = ''; f.elements.password2.value = '';
-        U.toast('아이디·비밀번호를 바꿨어요. 다음 로그인부터 새 비밀번호를 쓰세요.');
+        if (r.token) { S.token = r.token; try { sessionStorage.setItem(KEY, r.token); } catch (x) {} }   // 이 화면은 새 열쇠로 계속
+        U.toast('아이디·비밀번호를 바꿨어요. 다른 곳에 로그인돼 있던 화면은 다시 로그인해야 해요.');
       });
       return;
     }
     if (f.hasAttribute('data-settings')) {
       btn.disabled = true;
-      call('rsvAdminSettings', { open: f.elements.open.checked, max: f.elements.max.value, openAt: f.elements.openAt.value }).then(function (r) { btn.disabled = false; after(r, '설정을 저장했어요.'); });
+      call('rsvAdminSettings', { open: f.elements.open.checked, max: f.elements.max.value, openAt: f.elements.openAt.value }).then(function (r) { after(r, '설정을 저장했어요.', btn); });
     }
     if (f.hasAttribute('data-block') || f.hasAttribute('data-book')) {
       var block = f.hasAttribute('data-block'), el = f.elements;
@@ -489,10 +506,9 @@
       if (!block) { data.phone = el.phone.value; data.org = el.org.value; data.email = el.email.value; data.password = el.password.value; }
       btn.disabled = true;
       call('rsvAdminBook', data).then(function (r) {
-        btn.disabled = false;
-        if (r.code === 'invalid') { U.fieldErrors(f, r.errors); U.$('.rv-err', f) && (U.$('.rv-err', f).textContent = r.message); return; }
+        if (r.code === 'invalid') { btn.disabled = false; U.fieldErrors(f, r.errors); U.$('.rv-err', f) && (U.$('.rv-err', f).textContent = r.message); return; }
         if (r.ok) { S.pick = []; S.focus = r.item.id; }
-        after(r, block ? '좌석을 막았어요.' : '확정 예약으로 등록했어요.' + (data.email ? ' 확정 메일을 보냈어요.' : ''));
+        after(r, block ? '좌석을 막았어요.' : '확정 예약으로 등록했어요.' + (data.email ? ' 확정 메일을 보냈어요.' : ''), btn);
       });
     }
   });

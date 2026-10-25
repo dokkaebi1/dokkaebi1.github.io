@@ -195,7 +195,7 @@
     var items = kind === 'mine'
       ? [['me', '내 좌석'], ['', '다른 좌석']]
       : kind === 'admin'
-        ? [['', '빈 좌석'], ['sel', '고른 좌석'], ['h', '손님이 고르는 중'], ['w', '승인 대기'], ['t', '확정'], ['arr', '도착'], ['b', '막음'], ['wh', '휠체어석']]
+        ? [['', '빈 좌석'], ['sel', '고른 좌석'], ['w', '승인 대기'], ['t', '확정'], ['arr', '도착'], ['b', '막음'], ['wh', '휠체어석']]
         : [['', '빈 좌석'], ['w', '승인 대기'], ['t', '예약 완료'], ['b', '예약 불가'], ['wh', '휠체어석 ♿']];
     return '<ul class="rv-legend">' + items.map(function (x) { return '<li><span class="sw ' + x[0] + '"></span>' + x[1] + '</li>'; }).join('') + '</ul>';
   }
@@ -212,11 +212,14 @@
     toastTimer = setTimeout(function () { t.classList.remove('show'); }, bad ? 5200 : 3200);
   }
 
-  /* 확인 창 (Promise<boolean>) */
+  /* 확인 창 (Promise<boolean>). 취소·삭제 같은 위험한 일(danger)은 처음 초점을 '닫기'에 둠 (Enter 한 번에 실행되지 않게) */
+  var dlgN = 0;
   function confirmBox(title, text, okLabel, danger) {
     return new Promise(function (resolve) {
-      var d = el('dialog', 'rv-dlg');
-      d.innerHTML = '<div class="in"><header><h2>' + esc(title) + '</h2></header><div class="body"><p style="margin:0">' + esc(text).replace(/\n/g, '<br>') + '</p></div>'
+      var d = el('dialog', 'rv-dlg'), n = ++dlgN;
+      d.setAttribute('aria-labelledby', 'rv-cf-t' + n);
+      d.setAttribute('aria-describedby', 'rv-cf-d' + n);
+      d.innerHTML = '<div class="in"><header><h2 id="rv-cf-t' + n + '">' + esc(title) + '</h2></header><div class="body"><p id="rv-cf-d' + n + '" style="margin:0">' + esc(text).replace(/\n/g, '<br>') + '</p></div>'
         + '<footer><button type="button" class="rv-btn rv-btn-line" data-no>닫기</button><button type="button" class="rv-btn ' + (danger ? 'rv-btn-red' : 'rv-btn-ink') + '" data-yes>' + esc(okLabel || '확인') + '</button></footer></div>';
       document.body.appendChild(d);
       function done(v) { d.close(); d.remove(); resolve(v); }
@@ -224,7 +227,7 @@
       d.querySelector('[data-yes]').onclick = function () { done(true); };
       d.addEventListener('cancel', function (e) { e.preventDefault(); done(false); });
       d.showModal();
-      d.querySelector('[data-yes]').focus();
+      d.querySelector(danger ? '[data-no]' : '[data-yes]').focus();
     });
   }
 
@@ -260,15 +263,27 @@
       .then(function (r) { clearTimeout(timer); return r; });
   }
 
+  /* 입력 칸 오류 표시: 칸에 aria-invalid, 오류 문구를 aria-describedby 로 이어 줌 (화면 읽기 프로그램이 같이 읽게) */
+  var errN = 0;
   function fieldErrors(form, errors) {
-    form.querySelectorAll('.rv-fld').forEach(function (f) { f.classList.remove('bad'); var e = f.querySelector('.err'); if (e) e.remove(); });
+    form.querySelectorAll('.rv-fld').forEach(function (f) {
+      f.classList.remove('bad');
+      var e = f.querySelector('.err'); if (e) e.remove();
+      var i = f.querySelector('input, select, textarea');
+      if (i) { i.removeAttribute('aria-invalid'); if (i.dataset.desc != null) { if (i.dataset.desc) i.setAttribute('aria-describedby', i.dataset.desc); else i.removeAttribute('aria-describedby'); } }
+    });
     var first = null;
     Object.keys(errors || {}).forEach(function (k) {
       var inp = form.querySelector('[name="' + k + '"]');
       var f = inp && inp.closest('.rv-fld');
       if (!f) return;
       f.classList.add('bad');
-      f.appendChild(el('span', 'err', esc(errors[k])));
+      var msg = el('span', 'err', esc(errors[k]));
+      msg.id = 'rv-err-' + (++errN);
+      f.appendChild(msg);
+      if (inp.dataset.desc == null) inp.dataset.desc = inp.getAttribute('aria-describedby') || '';
+      inp.setAttribute('aria-invalid', 'true');
+      inp.setAttribute('aria-describedby', (inp.dataset.desc ? inp.dataset.desc + ' ' : '') + msg.id);
       if (!first) first = inp;
     });
     if (first) first.focus();
