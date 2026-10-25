@@ -431,8 +431,7 @@ var RSV = (function () {
     if (!show) return fail('show', '공연 회차를 골라 주세요.');
     // 좌석은 서버가 신청 순서대로 배정 (count = 인원, wheel = 그중 휠체어 이용 인원)
     var count = Math.floor(+req.count), wheel = Math.floor(+req.wheel || 0);
-    if (!(count >= 1)) return fail('seats', '인원을 정해 주세요.');
-    if (count > cfg.max) return fail('seats', '한 번에 ' + cfg.max + '명(좌석)까지 예약할 수 있어요.');
+    if (!(count >= 1) || count > SEATS.length) return fail('seats', '인원을 정해 주세요.');   // 최대 인원은 잠금 안에서 (이미 접수된 같은 요청은 최대 인원이 바뀌어도 그대로 확인되게)
     if (!(wheel >= 0) || wheel > WHEEL.length || wheel > count) return fail('wheel', '휠체어 이용 인원을 확인해 주세요 (최대 ' + WHEEL.length + '명, 전체 인원 안에서).');
 
     var errors = {};
@@ -445,14 +444,14 @@ var RSV = (function () {
     if (!email) errors.email = '확정 메일을 받을 이메일을 적어 주세요';
     else if (!emailOk(email)) errors.email = '이메일 주소를 확인해 주세요';
     if (pw.length < 4 || pw.length > 30) errors.password = '비밀번호는 4~30자로 정해 주세요';
-    if (!req.consent) errors.consent = '개인정보 수집·이용에 동의해 주세요';
+    if (req.consent !== true) errors.consent = '개인정보 수집·이용에 동의해 주세요';   // 문자열 "false" 등은 동의로 보지 않음
     if (Object.keys(errors).length) return fail('invalid', '입력한 내용을 확인해 주세요.', { errors: errors });
     if (!env.sha256) return fail('server', '서버 설정이 끝나지 않았어요.');
     // 신청 내용 지문: 회차·인원·휠체어·연락처뿐 아니라 이름·기관·요청사항·비밀번호까지 (하나라도 바뀌면 같은 요청번호로 받지 않음)
-    var tag = reqId + ':' + env.sha256([show.id, count, wheel, digits, email, name, org, note, pw].join('|')).slice(0, 16);
+    var tag = reqId + ':' + env.sha256(JSON.stringify([show.id, count, wheel, digits, email, name, org, note, pw])).slice(0, 16);   // 칸 경계가 분명하게 (JSON)
 
-    var out = null, rec = null, rl = 'rsvn:' + digits;
-    env.lock(function () {
+    var out = null, rec = null, rl = 'rsvn:' + digits, claim = '';
+    try { env.lock(function () {
       var recs = readAll(env);
       var same = recs.filter(function (x) { return x.req && x.req.split(':')[0] === reqId; })[0];
       if (same) {
@@ -460,7 +459,7 @@ var RSV = (function () {
         out = bookResult(same, true);
         // 저장은 됐는데 메일 단계까지 못 간 신청(앞 응답이 중간에 실패)이면 이번에 메일을 보냄 (한 번만: 5분 표시)
         if (!/(담당자 알림|접수 메일)/.test(same.mailLog) && same.status === ST.WAIT && !env.cache.get('rsvmail:' + same.id)) {
-          env.cache.put('rsvmail:' + same.id, '1', 300);
+          claim = 'rsvmail:' + same.id; env.cache.put(claim, '1', 300);
           rec = same;
         }
         return;
@@ -485,14 +484,20 @@ var RSV = (function () {
       rec = { id: id, createdAt: env.now(), show: show.id, seats: got.seats, status: ST.WAIT, name: name, org: org, phone: phone, email: email,
         note: note, memo: got.apart ? env.now() + ' 확인 필요: 휠체어 동행인 일부가 2층 (1층 자리 없음)' : '', arrivedAt: '', decidedAt: '', mailLog: '',
         pw: salt + '$' + env.sha256(salt + ':' + pw), req: tag };
+      claim = 'rsvmail:' + id; env.cache.put(claim, '1', 300);           // 메일 단계 표시는 잠금 안에서 (같은 요청이 잠금 풀리자마자 와도 메일이 두 번 가지 않게)
       addRec(env, rec);                                                   // 이 줄이 저장돼야 접수 (실패하면 여기서 오류)
       try { env.props.set(sideKey(show.id), side === 'L' ? 'R' : 'L'); }  // 저장된 뒤에만 차례를 넘김. 실패해도 접수는 그대로 (다음 예약이 같은 구역부터)
       catch (e) { if (typeof console !== 'undefined') console.error('배정 차례 저장 실패: ' + (e && e.message)); }
       out = bookResult(rec);
-    });
+    }); } catch (e) {
+      // 저장 마무리(flush 등)에서 실패: 저장됐는지 확실하지 않음 → 메일 표시를 풀어 두고 '결과 불명확'으로 답함.
+      // 화면은 요청번호를 그대로 두고, 같은 내용으로 다시 보내면 저장된 경우 같은 예약 + 빠진 메일, 안 된 경우 새로 접수
+      if (claim) { try { env.cache.remove(claim); } catch (x) {} }
+      if (typeof console !== 'undefined') console.error('예약 저장 마무리 실패: ' + (e && e.message));
+      return fail('unsure', '접수가 끝났는지 확인하지 못했어요. 내용을 바꾸지 말고 ‘예약 신청하기’를 한 번 더 눌러 주세요. 두 번 접수되지 않아요.');
+    }
     if (!out.ok || !rec) return out;
-    // 메일 단계 표시는 잠금(저장·flush)이 끝까지 성공한 뒤에만: 저장 마무리가 실패해 다시 보낸 요청이 메일을 이어서 보낼 수 있게
-    if (!out.again) { try { env.cache.put('rsvmail:' + rec.id, '1', 300); env.cache.put(rl, String(+(env.cache.get(rl) || 0) + 1), 3600); } catch (e) {} }
+    if (!out.again) { try { env.cache.put(rl, String(+(env.cache.get(rl) || 0) + 1), 3600); } catch (e) {} }
     // 여기부터는 예약 저장과 따로: 실패해도 예약은 그대로 (메일 기록에 남고 관리 화면에서 다시 보내기)
     var aerr = mailAdmin(env, '[좌석 예약 신청] ' + showLabel(rec.show) + ' · ' + rec.name + ' · ' + rec.seats.length + '석', rec, '새 좌석 예약 신청이 들어왔습니다. (승인 대기)' + (rec.memo ? '\n' + rec.memo : ''));
     var merr = mailReceived(env, rec), at = env.now();
@@ -559,24 +564,27 @@ var RSV = (function () {
     if (!counted && n >= 3) return fail('many', '확인 번호를 너무 여러 번 요청했어요. 1시간 뒤 다시 해 주세요.');
     var code = makeCode(env);
     env.cache.put('rsvcode:' + key, JSON.stringify({ code: code, tries: 0, exp: nowMs(env) + 900e3 }), 900);
-    env.cache.put(rk, String(n + 1), 3600);
+    if (!counted) env.cache.put(rk, String(n + 1), 3600);
     var err = send(env, to, subject, lines.concat(['', '확인 번호: ' + code, '', '15분 동안 쓸 수 있어요. 직접 요청하지 않았다면 이 메일은 무시해 주세요.', '예약 시스템(홈페이지) 문의: ' + EVENT.sysPhone]));
     return err ? fail('mail', '메일을 보내지 못했어요. 예약 시스템 문의 ' + EVENT.sysPhone + '로 연락 주세요.') : null;
   }
+  /* 확인 번호 확인 (잠금 안에서 부름). 틀렸을 때 답은 번호가 있든 없든·지났든 언제나 같음 (발급 여부를 짐작할 수 없게).
+     맞으면 null — 번호는 그대로 두고, 부른 쪽이 비밀번호 저장까지 마친 뒤 codeUsed 로 지움 (저장이 실패하면 같은 번호로 다시) */
+  function codeFail() { return fail('code', '확인 번호가 맞지 않거나 15분이 지났어요. 메일에 온 6자리 숫자를 확인하시거나 확인 번호를 다시 받아 주세요.', { errors: { code: '확인 번호를 확인해 주세요' } }); }
   function checkCode(env, key, code) {
     var v = null;
     try { v = JSON.parse(env.cache.get('rsvcode:' + key) || 'null'); } catch (e) { v = null; }
     var left = v ? Math.floor(((+v.exp || 0) - nowMs(env)) / 1000) : 0;
-    if (!v || left <= 0) { env.cache.remove('rsvcode:' + key); return fail('code', '확인 번호가 없거나 15분이 지났어요. 확인 번호를 다시 받아 주세요.'); }
+    if (!v || left <= 0) { env.cache.remove('rsvcode:' + key); return codeFail(); }
     if (str(code).replace(/\D/g, '') !== v.code) {
       v.tries++;
-      if (v.tries >= 5) { env.cache.remove('rsvcode:' + key); return fail('code', '확인 번호를 5번 틀렸어요. 확인 번호를 다시 받아 주세요.'); }
-      env.cache.put('rsvcode:' + key, JSON.stringify(v), Math.max(1, left));   // 남은 시간 그대로 (늘리지 않음)
-      return fail('code', '확인 번호가 맞지 않아요. 메일에 온 6자리 숫자를 넣어 주세요.', { errors: { code: '확인 번호가 맞지 않아요' } });
+      if (v.tries >= 5) env.cache.remove('rsvcode:' + key);
+      else env.cache.put('rsvcode:' + key, JSON.stringify(v), Math.max(1, left));   // 남은 시간 그대로 (늘리지 않음)
+      return codeFail();
     }
-    env.cache.remove('rsvcode:' + key);
     return null;
   }
+  function codeUsed(env, key) { env.cache.remove('rsvcode:' + key); }
   /* 이메일 또는 휴대전화 번호로 예약을 찾아, 예약에 적힌 이메일로 확인 번호를 보냄.
      예약이 있든 없든 같은 답을 돌려줌 (다른 사람이 이메일·번호로 예약 여부를 알아낼 수 없게) */
   function guestForgot(req, env) {
@@ -584,16 +592,23 @@ var RSV = (function () {
     if (email && !emailOk(email)) return fail('invalid', '이메일 주소를 확인해 주세요.', { errors: { email: '이메일 주소를 확인해 주세요' } });
     if (!email && digits.length < 9) return fail('invalid', '예약할 때 적은 이메일이나 휴대전화 번호를 넣어 주세요.');
     // 요청 수 제한: 예약이 있든 없든 같은 기준 (1시간에 3번)
-    var fk = 'rsvforgot:' + (email || digits), n = +(env.cache.get(fk) || 0);
-    if (n >= 3) return fail('many', '확인 번호를 너무 여러 번 요청했어요. 1시간 뒤 다시 해 주세요. 급하면 예약 시스템 문의 ' + EVENT.sysPhone + '로 연락 주세요.');
-    env.cache.put(fk, String(n + 1), 3600);
-    var recs = readAll(env).filter(function (x) { return x.pw && x.status !== ST.BLOCK; });
-    var hit = recs.filter(function (x) { return email ? x.email === email : x.phone.replace(/\D/g, '') === digits; })[0];
-    if (hit) {
+    var fk = 'rsvforgot:' + (email || digits), many = false, hit = null, go = false;
+    env.lock(function () {
+      var n = +(env.cache.get(fk) || 0);
+      if (n >= 3) { many = true; return; }
+      env.cache.put(fk, String(n + 1), 3600);
+      var recs = readAll(env).filter(function (x) { return x.pw && x.status !== ST.BLOCK; });
+      hit = recs.filter(function (x) { return email ? x.email === email : x.phone.replace(/\D/g, '') === digits; })[0] || null;
+      if (!hit) return;
+      var ck = 'rsvcodecnt:g:' + hit.email, c = +(env.cache.get(ck) || 0);   // 받는 이메일 기준 1시간 3통 (이메일·전화 찾기 합쳐서)
+      if (c >= 3) return;
+      env.cache.put(ck, String(c + 1), 3600);
+      go = true;
       if (!email) env.cache.put('rsvcodeph:' + digits, hit.email, 900);
-      sendCode(env, 'g:' + hit.email, hit.email, '[' + EVENT.org + '] 좌석 예약 비밀번호 찾기 확인 번호', [
-        EVENT.series + ' 〈' + EVENT.title + '〉 좌석 예약의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.'], true);
-    }
+    });
+    if (many) return fail('many', '확인 번호를 너무 여러 번 요청했어요. 1시간 뒤 다시 해 주세요. 급하면 예약 시스템 문의 ' + EVENT.sysPhone + '로 연락 주세요.');
+    if (go) sendCode(env, 'g:' + hit.email, hit.email, '[' + EVENT.org + '] 좌석 예약 비밀번호 찾기 확인 번호', [
+      EVENT.series + ' 〈' + EVENT.title + '〉 좌석 예약의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.'], true);
     return { ok: true, sentTo: email ? maskEmail(email) : '', byPhone: !email };
   }
   function guestReset(req, env) {
@@ -603,7 +618,7 @@ var RSV = (function () {
     if (pw.length < 4 || pw.length > 30) return fail('invalid', '새 비밀번호는 4~30자로 정해 주세요.', { errors: { password: '4~30자로 정해 주세요' } });
     var bad = null, mine = [];
     env.lock(function () {   // 확인 번호 확인·소비와 비밀번호 저장을 한 번에 (같은 번호로 동시에 두 번 바꾸지 못하게)
-      bad = email ? checkCode(env, 'g:' + email, req.code) : fail('code', '확인 번호가 없거나 15분이 지났어요. 확인 번호를 다시 받아 주세요.');
+      bad = email ? checkCode(env, 'g:' + email, req.code) : codeFail();
       if (bad) return;
       mine = readAll(env).filter(function (x) { return x.email === email && x.status !== ST.BLOCK; });
       mine.forEach(function (x) {
@@ -611,6 +626,7 @@ var RSV = (function () {
         x.pw = salt + '$' + env.sha256(salt + ':' + pw);
       });
       saveRecs(env, mine);
+      codeUsed(env, 'g:' + email);   // 저장까지 끝난 뒤 번호를 지움
     });
     if (bad) return bad;
     if (!mine.length) return fail('missing', '이 이메일로 신청한 예약을 찾지 못했어요.');
@@ -730,6 +746,7 @@ var RSV = (function () {
       var salt = env.uuid().slice(0, 16);
       nc = { id: c.id || 'admin', salt: salt, hash: adminHash(env, salt, pw) };
       env.setAdminCred(nc);
+      codeUsed(env, 'admin');
     });
     if (bad) return bad;
     env.cache.remove('rsvadmfail:' + env.sha256(str(nc.id).toLowerCase()).slice(0, 16));
@@ -775,6 +792,7 @@ var RSV = (function () {
       if (!x) { out = fail('missing', '예약을 찾을 수 없어요. 새로고침해 주세요.'); return; }
       out = fn(x, recs);
       if (!out || !out.ok) return;
+      if (out.same) { delete out.same; return; }
       var changed = x._stamp; delete x._stamp;
       saveRecs(env, [x]);
       if (changed) out.stamp = stamp(env, x.id);
@@ -784,7 +802,8 @@ var RSV = (function () {
     delete out.x; delete out.mail;
     if (mail) {
       var cur = findRec(env, x.id), line;
-      if (!cur || cur.status !== mail.when || env.cache.get('rsvst:' + x.id) !== out.stamp) { line = [env.now() + ' ' + mail.label + ' 안 보냄 (그 사이 예약 상태가 바뀜)', false]; out.mailed = false; out.mailSkipped = true; }
+      var st0 = null; try { st0 = env.cache.get('rsvst:' + x.id); } catch (e) { st0 = out.stamp; }
+      if (!cur || cur.status !== mail.when || (out.stamp && st0 !== out.stamp)) { line = [env.now() + ' ' + mail.label + ' 안 보냄 (그 사이 예약 상태가 바뀜)', false]; out.mailed = false; out.mailSkipped = true; }
       else { var err = mail.send(cur); line = [env.now() + ' ' + mail.label, err]; out.mailed = !err; if (err) out.mailError = err; }
       var y = logOn(env, x.id, [line]);
       if (y) x = y; else out.logSaved = false;
@@ -794,7 +813,10 @@ var RSV = (function () {
     return out;
   }
   /* 상태가 바뀔 때마다 새 표(30분)를 남김: 메일을 보내기 직전 표가 그대로인지 보고, 그 사이 다른 처리(취소 등)가 있었으면 보내지 않음 */
-  function stamp(env, id) { var t = env.uuid().slice(0, 12); env.cache.put('rsvst:' + id, t, 1800); return t; }
+  function stamp(env, id) {
+    var t = env.uuid().slice(0, 12);
+    try { env.cache.put('rsvst:' + id, t, 1800); return t; } catch (e) { return null; }   // 캐시 실패 → null (메일은 상태만 보고 판단)
+  }
   function freeFor(x, recs) {
     var occ = {};
     recs.forEach(function (r) { if (r.id !== x.id && r.show === x.show && ACTIVE[r.status]) r.seats.forEach(function (s) { occ[s] = true; }); });
@@ -809,9 +831,10 @@ var RSV = (function () {
           var clash = freeFor(x, recs);
           if (clash.length) return fail('taken', '그 사이 다른 예약이 잡힌 좌석이 있어요: ' + clash.join(', '));
         }
-        var was = x.status;
-        if (!ACTIVE[was]) x.arrivedAt = '';   // 취소·거절했던 예약을 다시 살리면 예전 도착 시각은 지움
-        x.status = d === 'approve' ? ST.OK : ST.WAIT; x.decidedAt = env.now(); x._stamp = true;
+        var was = x.status, to = d === 'approve' ? ST.OK : ST.WAIT;
+        if (was === to) return { ok: true, x: x, same: true };   // 이미 그 상태 (두 번 누름): 아무것도 바꾸지 않음 → 먼저 누른 승인의 메일을 막지 않음
+        if (!ACTIVE[was] || to === ST.WAIT) x.arrivedAt = '';   // 다시 살리거나 승인 대기로 돌리면 예전 도착 시각은 지움
+        x.status = to; x.decidedAt = env.now(); x._stamp = true;
         var r = { ok: true, x: x };
         if (d === 'approve' && was !== ST.OK && x.email) r.mail = { label: '확정 메일', when: ST.OK, send: function (y) { return mailConfirm(env, y); } };
         return r;
@@ -835,8 +858,9 @@ var RSV = (function () {
     var m = x.status === ST.WAIT ? [env.now() + ' 접수 메일(다시)', mailReceived(env, x)]
       : x.status === ST.OK ? [env.now() + ' 확정 메일(다시)', mailConfirm(env, x)] : null;
     if (!m) return fail('status', '승인 대기나 확정된 예약만 메일을 다시 보낼 수 있어요.');
-    var y = logOn(env, x.id, [m]) || x;
-    return m[1] ? fail('mail', m[1], { item: adminView(y) }) : { ok: true, item: adminView(y) };
+    var y = logOn(env, x.id, [m]), extra = { item: adminView(y || x) };
+    if (!y) extra.logSaved = false;
+    return m[1] ? fail('mail', m[1], extra) : Object.assign({ ok: true }, extra);
   }
   /* 관리자 도착 처리: 확정된 예약만, 공연 당일(또는 도착 확인 시험 중)에만. 도착 취소는 언제나 */
   function adminArrive(req, env) {
@@ -912,10 +936,12 @@ var RSV = (function () {
       out = { ok: true };
     });
     if (!out.ok) return out;
-    if (kind === ST.OK && email && req.notify !== false) {   // 저장한 뒤 확정 메일
-      var err = mailConfirm(env, rec);
-      out.mailed = !err;
-      rec = logOn(env, rec.id, [[env.now() + ' 확정 메일', err]]) || rec;
+    if (kind === ST.OK && email && req.notify !== false) {   // 저장한 뒤 확정 메일 (보내기 직전에 아직 확정인지 다시 확인)
+      var cur = findRec(env, rec.id), line;
+      if (!cur || cur.status !== ST.OK) { line = [env.now() + ' 확정 메일 안 보냄 (그 사이 예약 상태가 바뀜)', false]; out.mailed = false; }
+      else { var err = mailConfirm(env, cur); line = [env.now() + ' 확정 메일', err]; out.mailed = !err; }
+      var y = logOn(env, rec.id, [line]);
+      if (y) rec = y; else out.logSaved = false;
     }
     out.item = adminView(rec);
     return out;
@@ -927,7 +953,7 @@ var RSV = (function () {
     if (req.confirm !== '초기화') return fail('confirm', '‘초기화’라고 적어 주세요.');
     if (!env.archive) return fail('off', '보관 기능이 준비되지 않았어요.');
     var moved = 0, kept = 0;
-    env.lock(function () {
+    try { env.lock(function () {
       var recs = readAll(env), go = recs.filter(function (x) { return req.blocks === true || x.status !== ST.BLOCK; });
       kept = recs.length - go.length;
       if (go.length) {
@@ -937,7 +963,10 @@ var RSV = (function () {
       moved = go.length;
       EVENT.shows.forEach(function (s) { env.props.set(sideKey(s.id), 'L'); });   // 자동 배정 차례도 처음(왼쪽)부터 (잠금 안에서)
       env.props.set('RSV_ARRIVE_TEST', '0');
-    });
+    }); } catch (e) {
+      if (typeof console !== 'undefined') console.error('초기화 중단: ' + (e && e.message));
+      return fail('partial', '초기화가 중간에 멈췄어요. 일부 예약만 옮겨졌을 수 있어요. ‘예약 전체 초기화’를 한 번 더 하면 남은 예약부터 이어서 옮겨요(보관 탭에 같은 내용이 두 번 들어가지 않아요).');
+    }
     var cfg = settings(env), occ = occupancy(readAll(env));
     return { ok: true, moved: moved, kept: kept, shows: EVENT.shows.map(function (s) { return showState(s, env, cfg, occ); }) };
   }
@@ -950,7 +979,11 @@ var RSV = (function () {
   }
   function saveSettings(req, env) {
     var set = {};
-    if (req.open !== undefined) set.RSV_OPEN = req.open ? '1' : '0';
+    if (req.open !== undefined) {
+      if (typeof req.open !== 'boolean') return fail('invalid', '예약 받기 설정을 확인해 주세요.');   // 문자열 "false" 같은 값은 받지 않음
+      set.RSV_OPEN = req.open ? '1' : '0';
+    }
+    if (req.arriveTest !== undefined && typeof req.arriveTest !== 'boolean') return fail('invalid', '도착 확인 시험 모드 값을 확인해 주세요.');
     if (req.max !== undefined) {
       var n = parseInt(req.max, 10);
       if (isNaN(n) || n < 1 || n > 242 || String(n) !== str(req.max).trim()) return fail('invalid', '최대 인원은 1~242 사이 숫자로 적어 주세요.');

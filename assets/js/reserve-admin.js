@@ -46,10 +46,13 @@
   }
   /* 관리자 요청: 보낼 때의 로그인(세대·열쇠)이 그대로일 때만 응답을 씀.
      로그아웃했거나 다시 로그인한 뒤 늦게 온 응답(옛 열쇠의 '로그인 필요' 포함)은 버림 */
+  function callApi(action, data) { return call(action, data); }
   function call(action, data) {
     var g = S.gen, t = S.token;
     return U.api(action, Object.assign({ token: t }, data || {})).then(function (r) {
       if (g !== S.gen || t !== S.token) throw { ok: false, code: 'stale' };
+      // 아이디·비밀번호를 바꾸는 중이면, 옛 열쇠로 보낸 다른 요청의 '로그인 필요'는 무시 (곧 새 열쇠로 바뀜)
+      if (r && r.code === 'auth' && S.credChanging && action !== 'rsvAdminCred') throw { ok: false, code: 'stale' };
       if (r && r.code === 'auth') { locked('로그인 시간이 지났어요. 다시 들어와 주세요.'); throw r; }
       return r;
     });
@@ -224,7 +227,7 @@
     var st = stats(S.show);
     body.innerHTML = showChips(S.show, false)
       + '<div class="ad-split"><div class="rv-board"><div class="rv-boardhead">' + U.legend('admin')
-      + '<span class="rv-sub" style="margin:0;font-size:14px">확정 ' + st.ok + '석 · 대기 ' + st.wait + '석 · 막음 ' + st.block + '석 · <b>남음 ' + st.left + '석</b>' + leftNote(show) + '</span></div>'
+      + '<span class="rv-sub" style="margin:0;font-size:14px">확정 ' + st.ok + '석 · 대기 ' + st.wait + '석 · 막음 ' + st.block + '석 · <b>남음 ' + st.left + '석</b>' + leftNote(S.show) + '</span></div>'
       + '<div class="rv-scroll"><div id="ad-hall"></div></div><p class="rv-hint">좌우로 밀어서 보세요</p></div>'
       + '<aside class="ad-side" id="ad-side"></aside></div>';
     S.map = U.hall(U.$('#ad-hall'), { admin: true, onPick: function (id) {
@@ -382,6 +385,9 @@
     if (S.busy[bk]) return;
     var lock = function () { S.busy[bk] = true; if (btn) btn.disabled = true; };
     var after = function (r, msg) { delete S.busy[bk]; afterAll(r, msg, btn); };
+    var call = function (a, d) {   // 이 처리의 요청: 응답이 버려지거나 실패해도 처리 중 표시·단추를 정리
+      return callApi(a, d).catch(function (e) { delete S.busy[bk]; if (btn) btn.disabled = false; throw e; });
+    };
     if (name === 'approve') { lock(); call('rsvAdminDecide', { id: id, decision: 'approve' }).then(function (r) { after(r, x.email ? '확정하고 확정 메일을 보냈어요.' : '확정했어요.'); }); }
     if (name === 'wait') { lock(); call('rsvAdminDecide', { id: id, decision: 'wait' }).then(function (r) { after(r, '승인 대기로 되돌렸어요.'); }); }
     if (name === 'reject') promptBox('예약 거절', '거절 이유 (예약자에게 메일로 안내돼요, 비워도 돼요)', { check: '예약자에게 안내 메일 보내기', ok: '거절하기' }).then(function (v) {
@@ -398,8 +404,10 @@
     });
     if (name === 'edit') (function open(keep) { editBox(x, keep).then(function (v) {
       if (!v) return;
+      lock();
       call('rsvAdminEdit', Object.assign({ id: id }, v)).then(function (r) {
         if (!r.ok && r.code !== 'missing') {   // 실패하면 적은 내용을 잃지 않게 다시 열어 줌
+          delete S.busy[bk]; if (btn) btn.disabled = false;
           open(Object.assign({}, v, { error: r.code === 'invalid' ? r.message + ' ' + Object.keys(r.errors || {}).map(function (k) { return r.errors[k]; }).join(', ') : r.message }));
           return;
         }
@@ -407,7 +415,7 @@
       }).catch(function () {});
     }); })();
     if (name === 'pw') promptBox('비밀번호 새로 정하기', '새 비밀번호 (4자 이상)', { text: x.name + ' (' + x.email + ')님 예약의 비밀번호를 바꿔요. 예약자가 로그인해 있던 화면은 다시 로그인해야 해요. 바꾼 비밀번호는 예약자에게 직접 알려 주세요.', ok: '바꾸기' }).then(function (v) {
-      if (!v) return; call('rsvAdminPassword', { id: id, password: v.value }).then(function (r) { after(r, '비밀번호를 바꿨어요.'); });
+      if (!v) return; lock(); call('rsvAdminPassword', { id: id, password: v.value }).then(function (r) { after(r, '비밀번호를 바꿨어요.'); });
     });
   }
 
@@ -470,6 +478,7 @@
       var pos = e.target.selectionStart;
       S.pending = false;
       U.$('#ad-body').innerHTML = listView();
+      applyBusy();   // 검색으로 다시 그려도 처리 중인 단추는 잠긴 채로
       var s = U.$('[data-search]'); s.focus(); s.setSelectionRange(pos, pos);
     }
   });
@@ -509,14 +518,16 @@
     if (f.hasAttribute('data-cred')) {
       if (f.elements.password.value !== f.elements.password2.value) { U.fieldErrors(f, { password2: '새 비밀번호가 서로 달라요' }); return; }
       btn.disabled = true;
+      S.credChanging = true;
       call('rsvAdminCred', { id: f.elements.id.value, password: f.elements.password.value }).then(function (r) {
+        S.credChanging = false;
         btn.disabled = false;
         if (r.code === 'invalid') { U.fieldErrors(f, r.errors); return; }
         if (!r.ok) { U.toast(r.message, true); return; }
         U.fieldErrors(f, {}); f.elements.password.value = ''; f.elements.password2.value = '';
         if (r.token) { S.token = r.token; try { sessionStorage.setItem(KEY, r.token); } catch (x) {} }   // 이 화면은 새 열쇠로 계속
         U.toast('아이디·비밀번호를 바꿨어요. 다른 곳에 로그인돼 있던 화면은 다시 로그인해야 해요.');
-      });
+      }).catch(function () { S.credChanging = false; btn.disabled = false; });
       return;
     }
     if (f.hasAttribute('data-settings')) {

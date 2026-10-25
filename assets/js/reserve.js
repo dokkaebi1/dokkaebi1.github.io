@@ -176,11 +176,13 @@
     return HOLDER + '-' + Date.now().toString(36) + Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
   }
   /* 앞서 답을 못 받은 신청이 서버에 접수됐는지 물어봄 → 접수됐으면 그 결과, 없으면 null.
-     '아직 없음'은 '접수 안 됨'이 아닐 수 있음(서버가 아직 처리 중) → 보낸 지 3분이 안 됐으면 { wait: true } */
-  var PEND_WAIT = 180000;
+     '아직 없음'은 '접수 안 됨'이 아닐 수 있음(서버가 아직 처리 중) → 보낸 지 7분(서버 한 번 실행의 최대 6분 + 여유)이 안 됐으면 { wait: true }.
+     보낸 시각이 없는 예전 기록은 지금부터 셈 */
+  var PEND_WAIT = 420000;
   function checkPending() {
     var p = pendGet();
     if (!p) return Promise.resolve(null);
+    if (!p.at) { p.at = Date.now(); pendSet(p); }
     return U.api('rsvBookStatus', { reqId: p.reqId }).then(function (r) {
       if (!r.ok) return Promise.reject(r);
       if (r.found) { pendSet(null); return r; }
@@ -202,6 +204,7 @@
     var badge = U.$('[data-st]', dlg); badge.className = 'st-badge ' + d[1]; badge.textContent = d[2];
     U.$('.rv-assigned', dlg).hidden = !live;
     U.$('[data-done-dead]', dlg).hidden = live;
+    U.$('[data-done-live]', dlg).hidden = !live;   // 공연 당일 도착 안내는 살아 있는 예약에만
     U.$('[data-mail-ok]', dlg).hidden = !live || r.mailed !== true;     // 보낸 것이 확인된 때만 '보냈어요'
     U.$('[data-mail-fail]', dlg).hidden = !live || r.mailed !== false;
     U.$('[data-mail-unknown]', dlg).hidden = !live || r.mailed === true || r.mailed === false;
@@ -265,7 +268,9 @@
       }
       return send(0).then(function (r) {
         idle();
-        if (r.code !== 'timeout' && r.code !== 'network') pendSet(null);   // 서버가 답했으면 (성공이든 거절이든) 기억할 필요 없음
+        // 결과가 분명할 때만 요청번호를 잊음. 응답 없음·저장 확인 못 함(unsure)·서버 오류는 같은 요청번호를 그대로 둠 (다시 누르면 이어서 처리)
+        var unsure = r.code === 'timeout' || r.code === 'network' || r.code === 'unsure' || r.code === 'server';
+        if (!unsure) pendSet(null);
         if (r.ok) {
           showDone(r, f.email.value.trim());
           form.reset();
@@ -276,6 +281,7 @@
         }
         if (r.code === 'invalid') { U.fieldErrors(form, r.errors); err.textContent = r.message; return; }
         if (r.code === 'full' || r.code === 'wheel') { err.textContent = r.message; load(); return; }
+        if (r.code === 'unsure' || r.code === 'server') { err.textContent = (r.message || '잠시 문제가 생겼어요.') + (r.code === 'server' ? ' 내용을 바꾸지 말고 다시 눌러도 두 번 접수되지 않아요.' : ''); return; }
         if (r.code === 'timeout' || r.code === 'network') {
           err.innerHTML = '서버 응답을 받지 못했어요. 이미 접수됐을 수 있으니 <a href="my.html" target="_blank">내 예약 확인</a>에서 먼저 확인해 주세요. 내용을 바꾸지 않고 다시 ‘예약 신청하기’를 눌러도 두 번 접수되지 않아요.';
           return;
