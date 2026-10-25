@@ -165,26 +165,46 @@
   /* ---------- 요청번호 · 답을 못 받은 신청 ---------- */
   function pendGet() { try { return JSON.parse(sessionStorage.getItem(PEND) || 'null'); } catch (e) { return null; } }
   function pendSet(v) { try { if (v) sessionStorage.setItem(PEND, JSON.stringify(v)); else sessionStorage.removeItem(PEND); } catch (e) {} }
-  function contentKey(f) { return [S.show, S.need, S.wheel, f.phone.value.replace(/\D/g, ''), f.email.value.trim().toLowerCase()].join('|'); }
+  /* 신청 내용 지문 (비밀번호는 그대로 두지 않고 짧은 해시만) — 하나라도 바뀌면 새 요청번호 */
+  function hash(t) { var h = 5381; for (var i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+  function contentKey(f) {
+    return [S.show, S.need, S.wheel, f.phone.value.replace(/\D/g, ''), f.email.value.trim().toLowerCase(),
+      hash([f.name.value.trim(), f.org.value.trim(), f.note.value.trim(), f.password.value].join('\u0001'))].join('|');
+  }
   function newReqId() {
     var a = new Uint8Array(6); (window.crypto || window.msCrypto).getRandomValues(a);
     return HOLDER + '-' + Date.now().toString(36) + Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
   }
-  /* 앞서 답을 못 받은 신청이 서버에 접수됐는지 물어봄 → 접수됐으면 그 결과 (없으면 null) */
+  /* 앞서 답을 못 받은 신청이 서버에 접수됐는지 물어봄 → 접수됐으면 그 결과, 없으면 null.
+     '아직 없음'은 '접수 안 됨'이 아닐 수 있음(서버가 아직 처리 중) → 보낸 지 3분이 안 됐으면 { wait: true } */
+  var PEND_WAIT = 180000;
   function checkPending() {
     var p = pendGet();
     if (!p) return Promise.resolve(null);
     return U.api('rsvBookStatus', { reqId: p.reqId }).then(function (r) {
       if (!r.ok) return Promise.reject(r);
+      if (r.found) { pendSet(null); return r; }
+      if (Date.now() - (p.at || 0) < PEND_WAIT) return { wait: true };
       pendSet(null);
-      return r.found ? r : null;
+      return null;
     });
   }
+  /* 완료창: 서버가 돌려준 상태 그대로 보여 줌 (승인 대기 · 확정 · 취소/거절) */
+  var DONE = {};
+  DONE[R.ST.WAIT] = ['예약 신청을 받았어요', 'wait', '승인 대기'];
+  DONE[R.ST.OK] = ['예약이 확정됐어요', 'ok', '예약 확정'];
+  DONE[R.ST.CANCEL] = ['이 신청은 취소된 예약이에요', 'no', '취소'];
+  DONE[R.ST.NO] = ['이 신청은 확정되지 않았어요', 'no', '거절'];
   function showDone(r, email) {
     panes(true);
-    U.$('[data-mail-ok]', dlg).hidden = r.mailed !== true;     // 보낸 것이 확인된 때만 '보냈어요'
-    U.$('[data-mail-fail]', dlg).hidden = r.mailed !== false;
-    U.$('[data-mail-unknown]', dlg).hidden = r.mailed === true || r.mailed === false;
+    var d = DONE[r.status] || DONE[R.ST.WAIT], live = r.status === R.ST.WAIT || r.status === R.ST.OK;
+    U.$('.done-pane h3', dlg).textContent = d[0];
+    var badge = U.$('[data-st]', dlg); badge.className = 'st-badge ' + d[1]; badge.textContent = d[2];
+    U.$('.rv-assigned', dlg).hidden = !live;
+    U.$('[data-done-dead]', dlg).hidden = live;
+    U.$('[data-mail-ok]', dlg).hidden = !live || r.mailed !== true;     // 보낸 것이 확인된 때만 '보냈어요'
+    U.$('[data-mail-fail]', dlg).hidden = !live || r.mailed !== false;
+    U.$('[data-mail-unknown]', dlg).hidden = !live || r.mailed === true || r.mailed === false;
     U.$('[data-no]', dlg).textContent = r.id;
     U.$('[data-what]', dlg).textContent = r.showLabel + ' · ' + r.seats.length + '명' + (r.again ? ' (앞서 보낸 신청)' : '');
     U.$('[data-mail]', dlg).textContent = email || '';
@@ -208,7 +228,16 @@
     var f = form.elements, errs = {};
     if (f.email.value.trim().toLowerCase() !== f.email2.value.trim().toLowerCase()) errs.email2 = '이메일이 서로 달라요. 다시 확인해 주세요';
     if (f.password.value !== f.password2.value) errs.password2 = '비밀번호가 서로 달라요';
-    if (Object.keys(errs).length) { U.fieldErrors(form, errs); return; }
+    // 보내기 전에 빈 칸·형식 먼저 확인 (서버도 같은 규칙으로 다시 확인)
+    var digits = f.phone.value.replace(/\D/g, '');
+    if (!f.name.value.trim()) errs.name = '예약자 성함을 적어 주세요';
+    if (!f.phone.value.trim()) errs.phone = '연락처를 적어 주세요';
+    else if (!/^[\d\s()+-]+$/.test(f.phone.value.trim()) || digits.length < 9 || digits.length > 12) errs.phone = '전화번호를 확인해 주세요 (예: 010-1234-5678)';
+    if (!f.email.value.trim()) errs.email = '확정 메일을 받을 이메일을 적어 주세요';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.value.trim())) errs.email = '이메일 주소를 확인해 주세요';
+    if (f.password.value.length < 4 || f.password.value.length > 30) errs.password = '비밀번호는 4~30자로 정해 주세요';
+    if (!f.consent.checked) errs.consent = '개인정보 수집·이용에 동의해 주세요';
+    if (Object.keys(errs).length) { U.fieldErrors(form, errs); U.$('.rv-err', dlg).textContent = '입력한 내용을 확인해 주세요.'; return; }
     var btn = U.$('[type=submit]', form), err = U.$('.rv-err', dlg);
     function idle() { S.busy = false; btn.disabled = false; btn.textContent = '예약 신청하기'; }
     S.busy = true; btn.disabled = true; btn.textContent = '보내는 중...';
@@ -217,12 +246,13 @@
     // 앞서 답을 못 받은 신청이 있으면: 같은 내용이면 같은 요청번호로 다시, 내용이 바뀌었으면 먼저 접수됐는지 확인
     var ready = p && p.key === key ? Promise.resolve(p.reqId)
       : checkPending().then(function (prev) {
+        if (prev && prev.wait) { idle(); err.innerHTML = '앞서 보낸 신청이 접수됐는지 아직 확인 중이에요. 1~2분 뒤 다시 눌러 주시거나 <a href="my.html" target="_blank">내 예약 확인</a>을 먼저 봐 주세요.'; return null; }
         if (prev) { idle(); showDone(prev, ''); U.toast('앞서 보낸 신청이 이미 접수돼 있어요. 바꾸려면 담당자에게 연락해 주세요.', true); return null; }
         return newReqId();
       }, function () { return Promise.reject({ ok: false, code: 'network' }); });
     ready.then(function (reqId) {
       if (!reqId) return;
-      pendSet({ reqId: reqId, key: key });
+      pendSet({ reqId: reqId, key: key, at: (pendGet() || {}).reqId === reqId ? pendGet().at : Date.now() });
       var body = {
         v: R.API_V, show: S.show, count: S.need, wheel: S.wheel, name: f.name.value, org: f.org.value, phone: f.phone.value, email: f.email.value,
         password: f.password.value, note: f.note.value, consent: f.consent.checked, website: f.website.value, elapsed: Date.now() - S.t0, reqId: reqId
@@ -261,7 +291,7 @@
   });
 
   // 새로고침·다시 들어왔을 때: 답을 못 받은 신청이 있으면 접수됐는지 먼저 확인해서 보여 줌
-  if (pendGet()) checkPending().then(function (prev) { if (prev) showDone(prev, ''); }, function () {});
+  if (pendGet()) checkPending().then(function (prev) { if (prev && !prev.wait) showDone(prev, ''); }, function () {});
 
   U.poll(load, POLL_MS);
 })();

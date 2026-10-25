@@ -6,7 +6,7 @@
   var R = window.RSV, U = window.RSVUI, esc = U.esc;
   var KEY = 'dk-rsv-admin';
   var ENTRY = (document.querySelector('meta[name="dokkaebi-rsv-admin"]') || {}).content || '';
-  var S = { poller: null, token: null, data: null, tab: 'list', show: 'all', filter: '승인 대기', q: '', pick: [], focus: null, gate: null, seenWait: null, pending: false, map: null, mapShow: null };
+  var S = { gen: 0, busy: {}, poller: null, token: null, data: null, tab: 'list', show: 'all', filter: '승인 대기', q: '', pick: [], focus: null, gate: null, seenWait: null, pending: false, map: null, mapShow: null };
   var root = U.$('#ad-root');
   var TITLE = document.title;
 
@@ -16,8 +16,9 @@
   else { try { S.token = sessionStorage.getItem(KEY); } catch (e) {} }
 
   function locked(msg) {
+    S.gen++;   // 이 전에 보낸 요청의 응답은 버림 (예약자 정보가 다시 그려지지 않게)
     try { sessionStorage.removeItem(KEY); } catch (e) {}
-    S.token = null; S.data = null;
+    S.token = null; S.data = null; S.busy = {};
     document.title = TITLE;
     root.innerHTML = '<div class="rv-card rv-login" style="margin-top:20px"><span class="rv-eyebrow">관리자</span><h2>좌석 예약 관리</h2>'
       + '<form data-login novalidate style="display:grid;gap:14px">'
@@ -43,8 +44,12 @@
     root.innerHTML = '<p class="rv-sub">불러오는 중이에요...</p>';
     if (S.poller) S.poller.now(); else S.poller = U.poll(load, 6000);
   }
+  /* 관리자 요청: 보낼 때의 로그인(세대·열쇠)이 그대로일 때만 응답을 씀.
+     로그아웃했거나 다시 로그인한 뒤 늦게 온 응답(옛 열쇠의 '로그인 필요' 포함)은 버림 */
   function call(action, data) {
-    return U.api(action, Object.assign({ token: S.token }, data || {})).then(function (r) {
+    var g = S.gen, t = S.token;
+    return U.api(action, Object.assign({ token: t }, data || {})).then(function (r) {
+      if (g !== S.gen || t !== S.token) throw { ok: false, code: 'stale' };
       if (r && r.code === 'auth') { locked('로그인 시간이 지났어요. 다시 들어와 주세요.'); throw r; }
       return r;
     });
@@ -119,6 +124,14 @@
     if (S.tab === 'map') mapView(body);
     if (S.tab === 'gate') gateView(body);
     if (S.tab === 'set') body.innerHTML = setView();
+    applyBusy();
+  }
+  /* 처리 중인 단추(예약번호·처리 종류)는 화면을 다시 그려도 잠긴 채로 */
+  function applyBusy() {
+    root.querySelectorAll('[data-act]').forEach(function (b) {
+      var row = b.closest('[data-id]');
+      if (row && S.busy[row.dataset.id + ':' + b.dataset.act]) b.disabled = true;
+    });
   }
   root.addEventListener('focusout', function () { setTimeout(function () { if (S.pending) render(); }, 50); });
 
@@ -314,7 +327,7 @@
 
   /* ---------- 처리 ---------- */
   /* 처리 결과: 이 요청이 잠근 단추만 다시 켬 (다른 처리 중인 단추는 그대로 잠김) */
-  function after(r, okMsg, btn) {
+  function afterAll(r, okMsg, btn) {
     if (btn) btn.disabled = false;
     if (!r.ok) { U.toast(r.message, true); if (r.item) load(); return; }
     var bad = r.mailed === false;
@@ -325,6 +338,7 @@
     opts = opts || {};
     return new Promise(function (resolve) {
       var d = U.el('dialog', 'rv-dlg');
+      d.setAttribute('aria-label', title);
       d.innerHTML = '<form class="in" novalidate><header><h2>' + esc(title) + '</h2></header><div class="body">'
         + (opts.text ? '<p style="margin:0">' + esc(opts.text) + '</p>' : '')
         + '<label class="rv-fld"><span>' + esc(label) + '</span><input name="v" maxlength="300"' + (opts.type ? ' type="' + opts.type + '"' : '') + '></label>'
@@ -340,9 +354,10 @@
       f.elements.v.focus();
     });
   }
-  function editBox(x) {
+  function editBox(x, keep) {
     return new Promise(function (resolve) {
       var d = U.el('dialog', 'rv-dlg');
+      d.setAttribute('aria-label', '예약자 정보 고치기');
       d.innerHTML = '<form class="in" novalidate><header><h2>예약자 정보 고치기</h2></header><div class="body">'
         + '<p style="margin:0">' + esc(x.id) + ' · ' + esc(R.dateLabel(x.show)) + ' · ' + esc(x.seats.join(', ')) + '</p>'
         + '<label class="rv-fld"><span>예약자 성함</span><input name="name" maxlength="30" value="' + esc(x.name) + '"></label>'
@@ -356,35 +371,43 @@
       U.$('[data-no]', d).onclick = function () { done(null); };
       d.addEventListener('cancel', function (e) { e.preventDefault(); done(null); });
       f.onsubmit = function (e) { e.preventDefault(); var el = f.elements; done({ name: el.name.value, org: el.org.value, phone: el.phone.value, email: el.email.value.trim() }); };
+      if (keep) ['name', 'org', 'phone', 'email'].forEach(function (k) { f.elements[k].value = keep[k]; });
+      if (keep && keep.error) { var e0 = U.el('p', 'rv-err', esc(keep.error)); e0.setAttribute('role', 'alert'); U.$('.body', d).appendChild(e0); }
       d.showModal();
     });
   }
   function act(name, id, btn) {
     var x = byId(id); if (!x) return;
-    var lock = function () { if (btn) btn.disabled = true; };
-    if (name === 'approve') { lock(); call('rsvAdminDecide', { id: id, decision: 'approve' }).then(function (r) { after(r, x.email ? '확정하고 확정 메일을 보냈어요.' : '확정했어요.', btn); }); }
-    if (name === 'wait') { lock(); call('rsvAdminDecide', { id: id, decision: 'wait' }).then(function (r) { after(r, '승인 대기로 되돌렸어요.', btn); }); }
+    var bk = id + ':' + name;
+    if (S.busy[bk]) return;
+    var lock = function () { S.busy[bk] = true; if (btn) btn.disabled = true; };
+    var after = function (r, msg) { delete S.busy[bk]; afterAll(r, msg, btn); };
+    if (name === 'approve') { lock(); call('rsvAdminDecide', { id: id, decision: 'approve' }).then(function (r) { after(r, x.email ? '확정하고 확정 메일을 보냈어요.' : '확정했어요.'); }); }
+    if (name === 'wait') { lock(); call('rsvAdminDecide', { id: id, decision: 'wait' }).then(function (r) { after(r, '승인 대기로 되돌렸어요.'); }); }
     if (name === 'reject') promptBox('예약 거절', '거절 이유 (예약자에게 메일로 안내돼요, 비워도 돼요)', { check: '예약자에게 안내 메일 보내기', ok: '거절하기' }).then(function (v) {
       if (!v) return; lock();
-      call('rsvAdminDecide', { id: id, decision: 'reject', reason: v.value, notify: v.check }).then(function (r) { after(r, '거절했어요. 좌석이 다시 열렸어요.', btn); });
+      call('rsvAdminDecide', { id: id, decision: 'reject', reason: v.value, notify: v.check }).then(function (r) { after(r, '거절했어요. 좌석이 다시 열렸어요.'); });
     });
     if (name === 'cancel') U.confirm('확정 예약을 취소할까요?', x.name + ' · ' + x.seats.join(', ') + '\n좌석이 다시 열려요. 예약자에게는 메일이 가지 않으니 따로 연락해 주세요.', '예약 취소', true).then(function (y) {
-      if (!y) return; lock(); call('rsvAdminDecide', { id: id, decision: 'cancel' }).then(function (r) { after(r, '예약을 취소했어요.', btn); });
+      if (!y) return; lock(); call('rsvAdminDecide', { id: id, decision: 'cancel' }).then(function (r) { after(r, '예약을 취소했어요.'); });
     });
-    if (name === 'resend') { lock(); call('rsvAdminResend', { id: id }).then(function (r) { after(r, x.status === R.ST.WAIT ? '신청 접수 메일을 다시 보냈어요.' : '확정 메일을 다시 보냈어요.', btn); }); }
-    if (name === 'arrive' || name === 'unarrive') { lock(); call('rsvAdminArrive', { id: id, arrived: name === 'arrive' }).then(function (r) { after(r, name === 'arrive' ? x.name + '님 도착 처리했어요.' : '도착을 취소했어요.', btn); }); }
+    if (name === 'resend') { lock(); call('rsvAdminResend', { id: id }).then(function (r) { after(r, x.status === R.ST.WAIT ? '신청 접수 메일을 다시 보냈어요.' : '확정 메일을 다시 보냈어요.'); }); }
+    if (name === 'arrive' || name === 'unarrive') { lock(); call('rsvAdminArrive', { id: id, arrived: name === 'arrive' }).then(function (r) { after(r, name === 'arrive' ? x.name + '님 도착 처리했어요.' : '도착을 취소했어요.'); }); }
     if (name === 'remove') U.confirm(x.status === R.ST.BLOCK ? '막음을 풀까요?' : '목록에서 지울까요?', x.seats.join(', ') + (x.status === R.ST.BLOCK ? '\n좌석이 다시 예약 가능해져요.' : '\n시트에서도 지워지고 되돌릴 수 없어요.'), x.status === R.ST.BLOCK ? '막음 풀기' : '지우기', true).then(function (y) {
-      if (!y) return; lock(); call('rsvAdminRemove', { id: id }).then(function (r) { if (S.focus === id) S.focus = null; after(r, x.status === R.ST.BLOCK ? '막음을 풀었어요.' : '지웠어요.', btn); });
+      if (!y) return; lock(); call('rsvAdminRemove', { id: id }).then(function (r) { if (S.focus === id) S.focus = null; after(r, x.status === R.ST.BLOCK ? '막음을 풀었어요.' : '지웠어요.'); });
     });
-    if (name === 'edit') editBox(x).then(function (v) {
+    if (name === 'edit') (function open(keep) { editBox(x, keep).then(function (v) {
       if (!v) return;
       call('rsvAdminEdit', Object.assign({ id: id }, v)).then(function (r) {
-        if (r.code === 'invalid') { U.toast(r.message + ' ' + Object.keys(r.errors).map(function (k) { return r.errors[k]; }).join(', '), true); return; }
-        after(r, '예약자 정보를 고쳤어요.' + (v.email !== x.email ? ' 바뀐 이메일로 내 예약 확인·비밀번호 찾기를 할 수 있어요.' : ''), btn);
-      });
-    });
+        if (!r.ok && r.code !== 'missing') {   // 실패하면 적은 내용을 잃지 않게 다시 열어 줌
+          open(Object.assign({}, v, { error: r.code === 'invalid' ? r.message + ' ' + Object.keys(r.errors || {}).map(function (k) { return r.errors[k]; }).join(', ') : r.message }));
+          return;
+        }
+        after(r, '예약자 정보를 고쳤어요.' + (v.email !== x.email ? ' 바뀐 이메일로 내 예약 확인·비밀번호 찾기를 할 수 있어요.' : ''));
+      }).catch(function () {});
+    }); })();
     if (name === 'pw') promptBox('비밀번호 새로 정하기', '새 비밀번호 (4자 이상)', { text: x.name + ' (' + x.email + ')님 예약의 비밀번호를 바꿔요. 예약자가 로그인해 있던 화면은 다시 로그인해야 해요. 바꾼 비밀번호는 예약자에게 직접 알려 주세요.', ok: '바꾸기' }).then(function (v) {
-      if (!v) return; call('rsvAdminPassword', { id: id, password: v.value }).then(function (r) { after(r, '비밀번호를 바꿨어요.', btn); });
+      if (!v) return; call('rsvAdminPassword', { id: id, password: v.value }).then(function (r) { after(r, '비밀번호를 바꿨어요.'); });
     });
   }
 
@@ -419,7 +442,7 @@
         call('rsvAdminResetAll', { confirm: '초기화', blocks: !!v.check }).then(function (r) {
           S.focus = null; S.pick = [];
           var left = (r.shows || []).map(function (s) { return R.dateLabel(s.id).replace(/ \(.\)/, '') + ' ' + s.leftGen + '석'; }).join(' · ');
-          after(r, '예약 ' + (r.moved || 0) + '건을 보관 탭으로 옮겼어요' + (r.kept ? ' (막은 좌석 ' + r.kept + '건은 그대로)' : '') + '. 남은 일반석: ' + left, t);
+          afterAll(r, '예약 ' + (r.moved || 0) + '건을 보관 탭으로 옮겼어요' + (r.kept ? ' (막은 좌석 ' + r.kept + '건은 그대로)' : '') + '. 남은 일반석: ' + left, t);
         });
       });
       return;
@@ -427,7 +450,7 @@
     if (t.dataset.arriveTest) {
       t.disabled = true;
       call('rsvAdminSettings', { arriveTest: t.dataset.arriveTest === 'on' }).then(function (r) {
-        after(r, r.settings && r.settings.arriveTest ? '도착 확인 시험 모드를 켰어요 (' + r.settings.arriveTestUntil + '까지).'
+        afterAll(r, r.settings && r.settings.arriveTest ? '도착 확인 시험 모드를 켰어요 (' + r.settings.arriveTestUntil + '까지).'
           : '도착 확인 시험 모드를 껐어요.' + (r.cleared ? ' 시험 도착 ' + r.cleared + '건을 ‘아직 안 옴’으로 되돌렸어요.' : ''), t);
       });
       return;
@@ -464,7 +487,7 @@
       U.api('rsvAdminLogin', { id: f.elements.id.value, password: f.elements.password.value }).then(function (r) {
         btn.disabled = false;
         if (!r.ok) { U.$('.rv-err', f).textContent = r.message; f.elements.password.select(); return; }
-        S.token = r.token;
+        S.gen++; S.token = r.token;
         try { sessionStorage.setItem(KEY, r.token); } catch (x) {}
         start();
       });
@@ -498,7 +521,7 @@
     }
     if (f.hasAttribute('data-settings')) {
       btn.disabled = true;
-      call('rsvAdminSettings', { open: f.elements.open.checked, max: f.elements.max.value, openAt: f.elements.openAt.value }).then(function (r) { after(r, '설정을 저장했어요.', btn); });
+      call('rsvAdminSettings', { open: f.elements.open.checked, max: f.elements.max.value, openAt: f.elements.openAt.value }).then(function (r) { afterAll(r, '설정을 저장했어요.', btn); });
     }
     if (f.hasAttribute('data-block') || f.hasAttribute('data-book')) {
       var block = f.hasAttribute('data-block'), el = f.elements;
@@ -508,7 +531,7 @@
       call('rsvAdminBook', data).then(function (r) {
         if (r.code === 'invalid') { btn.disabled = false; U.fieldErrors(f, r.errors); U.$('.rv-err', f) && (U.$('.rv-err', f).textContent = r.message); return; }
         if (r.ok) { S.pick = []; S.focus = r.item.id; }
-        after(r, block ? '좌석을 막았어요.' : '확정 예약으로 등록했어요.' + (data.email ? ' 확정 메일을 보냈어요.' : ''), btn);
+        afterAll(r, block ? '좌석을 막았어요.' : '확정 예약으로 등록했어요.' + (data.email ? ' 확정 메일을 보냈어요.' : ''), btn);
       });
     }
   });

@@ -575,3 +575,6 @@ html { -webkit-text-size-adjust: 100%; }
 .rv-done-map .seat.me { font-size: 7.5px; }
 .rv-typehint { margin: 10px 0 0; font-size: 15px; color: var(--text-soft); }
 .rv-typehint b { color: var(--ink); }
+
+/* 완료창 제목은 화면 읽기 프로그램용으로 초점만 옮김 (테두리는 그리지 않음) */
+.rv-done h3:focus { outline: none; }
