@@ -307,9 +307,9 @@
   }
 
   /* ---------- 처리 ---------- */
-  var locked = [];   // 처리하는 동안 잠근 단추 (실패해도 다시 켬)
+  var lockedBtns = [];   // 처리하는 동안 잠근 단추 (실패해도 다시 켬)
   function after(r, okMsg) {
-    locked.splice(0).forEach(function (b) { b.disabled = false; });
+    lockedBtns.splice(0).forEach(function (b) { b.disabled = false; });
     if (!r.ok) { U.toast(r.message, true); return; }
     var bad = r.item && /✗/.test((r.item.mailLog || '').split('\n').pop());
     U.toast(bad ? '처리했지만 메일은 보내지 못했어요. (메일 기록 확인)' : okMsg, bad);
@@ -355,7 +355,7 @@
   }
   function act(name, id, btn) {
     var x = byId(id); if (!x) return;
-    var lock = function () { if (btn) { btn.disabled = true; locked.push(btn); } };
+    var lock = function () { if (btn) { btn.disabled = true; lockedBtns.push(btn); } };
     if (name === 'approve') { lock(); call('rsvAdminDecide', { id: id, decision: 'approve' }).then(function (r) { after(r, x.email ? '확정하고 확정 메일을 보냈어요.' : '확정했어요.'); }); }
     if (name === 'wait') { lock(); call('rsvAdminDecide', { id: id, decision: 'wait' }).then(function (r) { after(r, '승인 대기로 되돌렸어요.'); }); }
     if (name === 'reject') promptBox('예약 거절', '거절 이유 (예약자에게 메일로 안내돼요, 비워도 돼요)', { check: '예약자에게 안내 메일 보내기', ok: '거절하기' }).then(function (v) {
@@ -409,7 +409,7 @@
       return;
     }
     if (t.dataset.arriveTest) {
-      t.disabled = true; locked.push(t);
+      t.disabled = true; lockedBtns.push(t);
       call('rsvAdminSettings', { arriveTest: t.dataset.arriveTest === 'on' }).then(function (r) {
         after(r, r.settings && r.settings.arriveTest ? '도착 확인 시험 모드를 켰어요 (' + r.settings.arriveTestUntil + '까지).'
           : '도착 확인 시험 모드를 껐어요.' + (r.cleared ? ' 시험 도착 ' + r.cleared + '건을 ‘아직 안 옴’으로 되돌렸어요.' : ''));
