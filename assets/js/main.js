@@ -36,6 +36,39 @@
     });
   }
 
+  // 첫 화면 공연 예약 배너창(#promo): 열려 있는 동안 키보드 초점을 창 안에 가두고, 뒤쪽 화면은 조작되지 않게(inert)
+  var promo = document.getElementById("promo");
+  if (promo && "MutationObserver" in window) {
+    var card = promo.querySelector(".promo__card") || promo, behind = [];
+    function focusables() {
+      return Array.prototype.filter.call(card.querySelectorAll("a[href], button, input, select, textarea, [tabindex]"), function (el) {
+        return el.getAttribute("tabindex") !== "-1" && !el.disabled && el.offsetParent !== null;
+      });
+    }
+    function onTab(e) {
+      if (e.key !== "Tab" || promo.hidden) return;
+      var f = focusables(); if (!f.length) return;
+      var first = f[0], last = f[f.length - 1], cur = document.activeElement;
+      if (e.shiftKey && (cur === first || !card.contains(cur) || cur === card)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (cur === last || !card.contains(cur))) { e.preventDefault(); first.focus(); }
+    }
+    function syncPromo() {
+      if (!promo.hidden) {
+        behind = Array.prototype.filter.call(document.body.children, function (el) {
+          return !el.contains(promo) && el.tagName !== "SCRIPT" && !el.inert;
+        });
+        behind.forEach(function (el) { el.inert = true; });
+        document.addEventListener("keydown", onTab);
+      } else {
+        behind.forEach(function (el) { el.inert = false; });
+        behind = [];
+        document.removeEventListener("keydown", onTab);
+      }
+    }
+    new MutationObserver(syncPromo).observe(promo, { attributes: true, attributeFilter: ["hidden"] });
+    if (!promo.hidden) syncPromo();
+  }
+
   // 첫 화면 배경영상: 넓은 화면 + 데이터 절약 모드가 아닐 때만 불러오기
   var hv = document.querySelector(".hero__media video[data-src]");
   var saveData = navigator.connection && navigator.connection.saveData;

@@ -506,3 +506,7 @@ dialog.form-dialog .dlg-close:hover, dialog.form-dialog .dlg-close:focus-visible
 @media (prefers-reduced-motion: reduce) { .promo { animation: none; } }
 .nav a.nav__reserve { opacity: 1; color: var(--gold); border-color: var(--gold); }
 @media (max-width: 820px) { .nav a.nav__reserve { border-color: rgba(255, 255, 255, .08); } }
+
+/* 2026-10-26 점검 반영: 입력 오류 표시, 전화번호 줄바꿈 방지 */
+.form [aria-invalid="true"], form.js-form [aria-invalid="true"] { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(194, 28, 49, .18); }
+a[href^="tel:"] { white-space: nowrap; }

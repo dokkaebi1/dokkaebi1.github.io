@@ -15,32 +15,90 @@
   }
 
   // ── 접수 양식 보내기 ─────────────────────────
+  // 서버(Code.js)와 같은 글자 수 한도 — 넘치면 서버가 조용히 잘라 저장하므로 입력 단계에서 막습니다
+  var LIMIT = { name: 40, org: 80, phone: 30, email: 80, audience: 100, message: 3000 };
+  var AUTO = { name: "name", org: "organization", phone: "tel", email: "email" };
+  var LABEL = { program: "프로그램을 골라", org: "기관·학교를 적어", name: "이름을 적어", phone: "연락처를 적어", email: "이메일을 적어", audience: "대상·인원을 적어", message: "내용을 적어" };
+  var TIMEOUT = 25000;
+  var telLink = document.querySelector('a[href^="tel:"]');
+  var TEL = telLink && /\d{2,4}-\d{3,4}-\d{4}/.test(telLink.textContent) ? telLink.textContent.match(/\d{2,4}-\d{3,4}-\d{4}/)[0] : "전화";
+
+  function field(form, n) { return form.querySelector('[name="' + n + '"]'); }
+  function prepare(form) {
+    Object.keys(LIMIT).forEach(function (n) {
+      var el = field(form, n), cur = el && el.maxLength > 0 ? el.maxLength : Infinity;
+      if (el) el.maxLength = Math.min(cur, LIMIT[n]);
+    });
+    Object.keys(AUTO).forEach(function (n) { var el = field(form, n); if (el && !el.hasAttribute("autocomplete")) el.setAttribute("autocomplete", AUTO[n]); });
+    var ph = field(form, "phone"); if (ph) ph.setAttribute("inputmode", "tel");
+    var em = field(form, "email"); if (em) em.setAttribute("inputmode", "email");
+  }
+  // 빈 필수 칸·형식 오류를 보내기 전에 표시하고, 첫 칸으로 초점을 옮깁니다
+  function check(form) {
+    var bad = [], msgs = [];
+    form.querySelectorAll("[aria-invalid]").forEach(function (el) { el.removeAttribute("aria-invalid"); });
+    function mark(el, why) { if (el && bad.indexOf(el) < 0) { bad.push(el); msgs.push(why); el.setAttribute("aria-invalid", "true"); } }
+    form.querySelectorAll("[required]").forEach(function (el) {
+      if (el.type === "checkbox" || el.name === "consent") return;
+      if (!String(el.value || "").trim()) mark(el, (LABEL[el.name] || "필수 항목을 채워") + " 주세요");
+    });
+    var ph = field(form, "phone"), em = field(form, "email");
+    var pv = ph ? ph.value.trim() : "", ev = em ? em.value.trim() : "";
+    if (ph && em && !pv && !ev) mark(ph, "연락처(전화 또는 이메일)를 적어 주세요");
+    if (pv && (!/^[0-9+()\-\s]+$/.test(pv) || pv.replace(/\D/g, "").length < 9 || pv.replace(/\D/g, "").length > 12)) mark(ph, "전화번호를 확인해 주세요 (예: 010-1234-5678)");
+    if (ev && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ev)) mark(em, "이메일 주소를 확인해 주세요");
+    if (bad.length) bad[0].focus();
+    return msgs.length ? msgs.slice(0, 3).join(" · ") : "";
+  }
+  // 같은 내용을 다시 보내면 같은 요청번호를 씁니다(서버가 중복 접수를 거를 수 있도록). 내용이 바뀌면 새 번호.
+  function reqIdFor(form, data) {
+    var sig = JSON.stringify([data.type, data.name, data.org, data.phone, data.email, data.date, data.program, data.audience, data.message]);
+    if (form._sig !== sig) { form._sig = sig; form._req = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+    return form._req;
+  }
+
   document.querySelectorAll("form.js-form").forEach(function (form) {
     if (!API) {
       form.querySelectorAll("input, select, textarea, button").forEach(function (el) { el.disabled = true; });
       say(form, "온라인 접수를 준비하고 있습니다. 지금은 전화로 문의해 주세요.", false);
       return;
     }
+    prepare(form);
+    form.addEventListener("input", function (e) { if (e.target.getAttribute("aria-invalid")) e.target.removeAttribute("aria-invalid"); });
     form.addEventListener("submit", function (e) {
       e.preventDefault();
-      var data = { type: form.getAttribute("data-type"), elapsed: Date.now() - started };
-      new FormData(form).forEach(function (v, k) { data[k] = v; });
-      data.consent = !!(form.querySelector('[name="consent"]') || {}).checked;
-      if (!data.consent) { say(form, "개인정보 수집·이용에 동의해 주세요.", false); return; }
       var btn = form.querySelector('button[type="submit"]');
+      if (btn.disabled) return;
+      var data = { type: form.getAttribute("data-type"), elapsed: Date.now() - started };
+      new FormData(form).forEach(function (v, k) { data[k] = typeof v === "string" ? v.trim() : v; });
+      var problem = check(form);
+      if (problem) { say(form, problem + ".", false); return; }
+      data.consent = !!(form.querySelector('[name="consent"]') || {}).checked;
+      if (!data.consent) { say(form, "개인정보 수집·이용에 동의해 주세요.", false); var c = field(form, "consent"); if (c) c.focus(); return; }
+      data.reqId = reqIdFor(form, data);
       btn.disabled = true;
       say(form, "보내는 중입니다…", true);
-      fetch(API, { method: "POST", body: JSON.stringify(data) })
+      var ctrl = "AbortController" in window ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, TIMEOUT);
+      fetch(API, { method: "POST", body: JSON.stringify(data), signal: ctrl ? ctrl.signal : undefined })
         .then(function (r) { return r.json(); })
         .then(function (res) {
+          clearTimeout(timer);
           btn.disabled = false;
           if (res.ok) {
-            form.reset();
+            form.reset(); form._sig = null;
             say(form, form.getAttribute("data-done") || "접수되었습니다. 확인 후 연락드리겠습니다.", true);
             document.dispatchEvent(new CustomEvent("dokkaebi:submitted", { detail: data }));
           } else say(form, res.error || "접수하지 못했습니다. 전화로 문의해 주세요.", false);
         })
-        .catch(function () { btn.disabled = false; say(form, "연결에 문제가 있습니다. 잠시 후 다시 보내거나 전화로 문의해 주세요.", false); });
+        .catch(function (err) {
+          clearTimeout(timer);
+          btn.disabled = false;
+          // 응답이 늦거나 끊기면 접수가 됐는지 알 수 없으므로, 입력은 그대로 두고 확인을 먼저 안내합니다
+          var late = err && err.name === "AbortError";
+          say(form, (late ? "응답이 늦어 접수 여부를 확인하지 못했습니다. " : "연결에 문제가 있어 접수 여부를 확인하지 못했습니다. ") +
+            "적으신 내용은 그대로 남아 있습니다. 다시 보내기 전에 전화" + (TEL === "전화" ? "" : "(" + TEL + ")") + "로 접수 여부를 확인해 주세요.", false);
+        });
     });
   });
 
@@ -131,7 +189,12 @@
     var seen = new Set();
     var io = new IntersectionObserver(function (es) {
       es.forEach(function (e) { e.isIntersecting ? seen.add(e.target) : seen.delete(e.target); });
-      fab.classList.toggle("is-hidden", seen.size > 0);
+      var hide = seen.size > 0;
+      fab.classList.toggle("is-hidden", hide);
+      // 눈에 안 보일 때는 키보드 초점·화면낭독기에서도 빠지게
+      fab.inert = hide;
+      if (hide) { fab.setAttribute("aria-hidden", "true"); fab.setAttribute("tabindex", "-1"); }
+      else { fab.removeAttribute("aria-hidden"); fab.removeAttribute("tabindex"); }
     });
     document.querySelectorAll("form.js-form").forEach(function (f) { if (!f.closest("dialog")) io.observe(f); });
   }
