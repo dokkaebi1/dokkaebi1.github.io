@@ -25,7 +25,7 @@
       + '<label class="rv-fld"><span>비밀번호</span><input name="password" type="password" autocomplete="current-password" required></label>'
       + '<p class="rv-err" role="alert">' + esc(msg || '') + '</p>'
       + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">들어가기</button></form>'
-      + '<button type="button" class="rv-link" data-adm-forgot>비밀번호를 잊으셨나요? 비밀번호 찾기</button>'
+      + '<button type="button" class="rv-link" data-adm-forgot>비밀번호를 잊으셨나요? 확인 번호 메일 받기</button>'
       + '<form data-adm-reset novalidate style="display:grid;gap:14px" hidden>'
       + '<p class="waitbox" style="margin:0" data-sent></p>'
       + '<label class="rv-fld"><span>확인 번호 (6자리)</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label>'
@@ -130,7 +130,10 @@
   var BADGE = { '승인 대기': 'wait', '확정': 'ok', '거절': 'no', '취소': 'no', '막음': 'block' };
   function card(x) {
     var acts = [];
-    if (x.status === R.ST.WAIT) acts.push(['approve', '승인 (확정 메일 보내기)', 'rv-btn-red'], ['reject', '거절', 'rv-btn-line']);
+    if (x.status === R.ST.WAIT) {
+      acts.push(['approve', '승인 (확정 메일 보내기)', 'rv-btn-red'], ['reject', '거절', 'rv-btn-line']);
+      if (x.email && /접수 메일[^\n]*✗/.test(x.mailLog || '')) acts.push(['resend', '접수 메일 다시 보내기', 'rv-btn-line']);
+    }
     if (x.status === R.ST.OK) {
       acts.push([x.arrivedAt ? 'unarrive' : 'arrive', x.arrivedAt ? '도착 취소' : '도착 처리', x.arrivedAt ? 'rv-btn-line' : 'rv-btn-ok']);
       if (x.email) acts.push(['resend', '확정 메일 다시 보내기', 'rv-btn-line']);
@@ -304,7 +307,9 @@
   }
 
   /* ---------- 처리 ---------- */
+  var locked = [];   // 처리하는 동안 잠근 단추 (실패해도 다시 켬)
   function after(r, okMsg) {
+    locked.splice(0).forEach(function (b) { b.disabled = false; });
     if (!r.ok) { U.toast(r.message, true); return; }
     var bad = r.item && /✗/.test((r.item.mailLog || '').split('\n').pop());
     U.toast(bad ? '처리했지만 메일은 보내지 못했어요. (메일 기록 확인)' : okMsg, bad);
@@ -350,7 +355,7 @@
   }
   function act(name, id, btn) {
     var x = byId(id); if (!x) return;
-    var lock = function () { if (btn) btn.disabled = true; };
+    var lock = function () { if (btn) { btn.disabled = true; locked.push(btn); } };
     if (name === 'approve') { lock(); call('rsvAdminDecide', { id: id, decision: 'approve' }).then(function (r) { after(r, x.email ? '확정하고 확정 메일을 보냈어요.' : '확정했어요.'); }); }
     if (name === 'wait') { lock(); call('rsvAdminDecide', { id: id, decision: 'wait' }).then(function (r) { after(r, '승인 대기로 되돌렸어요.'); }); }
     if (name === 'reject') promptBox('예약 거절', '거절 이유 (예약자에게 메일로 안내돼요, 비워도 돼요)', { check: '예약자에게 안내 메일 보내기', ok: '거절하기' }).then(function (v) {
@@ -360,7 +365,7 @@
     if (name === 'cancel') U.confirm('확정 예약을 취소할까요?', x.name + ' · ' + x.seats.join(', ') + '\n좌석이 다시 열려요. 예약자에게는 메일이 가지 않으니 따로 연락해 주세요.', '예약 취소', true).then(function (y) {
       if (!y) return; lock(); call('rsvAdminDecide', { id: id, decision: 'cancel' }).then(function (r) { after(r, '예약을 취소했어요.'); });
     });
-    if (name === 'resend') { lock(); call('rsvAdminResend', { id: id }).then(function (r) { after(r, '확정 메일을 다시 보냈어요.'); }); }
+    if (name === 'resend') { lock(); call('rsvAdminResend', { id: id }).then(function (r) { after(r, x.status === R.ST.WAIT ? '신청 접수 메일을 다시 보냈어요.' : '확정 메일을 다시 보냈어요.'); }); }
     if (name === 'arrive' || name === 'unarrive') { lock(); call('rsvAdminArrive', { id: id, arrived: name === 'arrive' }).then(function (r) { after(r, name === 'arrive' ? x.name + '님 도착 처리했어요.' : '도착을 취소했어요.'); }); }
     if (name === 'remove') U.confirm(x.status === R.ST.BLOCK ? '막음을 풀까요?' : '목록에서 지울까요?', x.seats.join(', ') + (x.status === R.ST.BLOCK ? '\n좌석이 다시 예약 가능해져요.' : '\n시트에서도 지워지고 되돌릴 수 없어요.'), x.status === R.ST.BLOCK ? '막음 풀기' : '지우기', true).then(function (y) {
       if (!y) return; lock(); call('rsvAdminRemove', { id: id }).then(function (r) { if (S.focus === id) S.focus = null; after(r, x.status === R.ST.BLOCK ? '막음을 풀었어요.' : '지웠어요.'); });
@@ -380,6 +385,8 @@
   root.addEventListener('click', function (e) {
     var t = e.target.closest('button, a'); if (!t) return;
     if (t.hasAttribute('data-adm-forgot')) {
+      U.confirm('비밀번호 찾기', '담당자 알림 메일로 6자리 확인 번호를 보낼까요?\n확인 번호와 새 비밀번호를 넣으면 다시 들어올 수 있어요.', '확인 번호 메일 보내기').then(function (yes) {
+      if (!yes) return;
       t.disabled = true;
       U.api('rsvAdminForgot', {}).then(function (r) {
         t.disabled = false;
@@ -388,6 +395,7 @@
         login.hidden = true; t.hidden = true; f.hidden = false;
         U.$('[data-sent]', f).textContent = '담당자 메일(' + r.sentTo + ')로 6자리 확인 번호를 보냈어요. 15분 안에 넣어 주세요.';
         f.elements.code.focus();
+      });
       });
       return;
     }
@@ -401,7 +409,7 @@
       return;
     }
     if (t.dataset.arriveTest) {
-      t.disabled = true;
+      t.disabled = true; locked.push(t);
       call('rsvAdminSettings', { arriveTest: t.dataset.arriveTest === 'on' }).then(function (r) {
         after(r, r.settings && r.settings.arriveTest ? '도착 확인 시험 모드를 켰어요 (' + r.settings.arriveTestUntil + '까지).'
           : '도착 확인 시험 모드를 껐어요.' + (r.cleared ? ' 시험 도착 ' + r.cleared + '건을 ‘아직 안 옴’으로 되돌렸어요.' : ''));

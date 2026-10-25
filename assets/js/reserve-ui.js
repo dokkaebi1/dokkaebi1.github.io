@@ -246,11 +246,18 @@
   /* 서버 주소는 페이지의 <meta name="dokkaebi-api"> 에서 읽습니다 (홈페이지 접수와 같은 서버) */
   var meta = document.querySelector('meta[name="dokkaebi-api"]');
   var API = meta ? meta.getAttribute('content') : '';
-  function api(action, data) {
-    if (!API) return Promise.resolve({ ok: false, code: 'off', message: '예약 서버가 아직 연결되지 않았어요. ' + R.EVENT.phone + '로 문의해 주세요.' });
-    return fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ action: action }, data || {})), redirect: 'follow' })
+  /* 서버 요청. 시간 안에 답이 없으면 code 'timeout' (신청은 40초, 나머지는 20초) */
+  function api(action, data, ms) {
+    if (!API) return Promise.resolve({ ok: false, code: 'off', message: '예약 서버가 아직 연결되지 않았어요. 예약 시스템 문의 ' + R.EVENT.sysPhone + '로 연락해 주세요.' });
+    var ctl = window.AbortController ? new AbortController() : null, timedOut = false;
+    var timer = setTimeout(function () { timedOut = true; if (ctl) ctl.abort(); }, ms || (action === 'rsvBook' ? 40000 : 20000));
+    return fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ action: action }, data || {})), redirect: 'follow', signal: ctl ? ctl.signal : undefined })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .catch(function () { return { ok: false, code: 'network', message: '연결이 잠시 원활하지 않아요. 잠시 후 다시 시도해 주세요.' }; });
+      .catch(function () {
+        return timedOut ? { ok: false, code: 'timeout', message: '서버 응답이 늦어요. 잠시 후 다시 시도해 주세요.' }
+          : { ok: false, code: 'network', message: '연결이 잠시 원활하지 않아요. 잠시 후 다시 시도해 주세요.' };
+      })
+      .then(function (r) { clearTimeout(timer); return r; });
   }
 
   function fieldErrors(form, errors) {

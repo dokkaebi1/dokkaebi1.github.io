@@ -53,7 +53,7 @@
       + '<label class="rv-fld" data-by="email"><span>예약할 때 적은 이메일</span><input name="email" type="email" inputmode="email" autocomplete="email"></label>'
       + '<label class="rv-fld" data-by="phone" hidden><span>예약할 때 적은 휴대전화 번호</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="010-1234-5678"></label>'
       + '<p class="rv-err" role="alert"></p>'
-      + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">확인 번호 받기</button>'
+      + '<button class="rv-btn rv-btn-red rv-btn-wide" type="submit">확인 번호 메일 보내기</button>'
       + '<button type="button" class="rv-link" data-switch>이메일이 기억나지 않으면 · 휴대전화 번호로 찾기</button></form>'
       + '<form data-step="2" novalidate style="display:grid;gap:14px" hidden>'
       + '<p class="waitbox" style="margin:0" data-sent></p>'

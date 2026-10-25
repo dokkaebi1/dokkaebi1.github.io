@@ -554,3 +554,9 @@ html { -webkit-text-size-adjust: 100%; }
   .gd-step { grid-template-columns: 1fr; padding: 16px; gap: 14px; }
   .gd-step figure { max-width: 250px; margin: 0 auto; border-width: 5px; }
 }
+/* 고른 좌석이 여러 곳으로 나뉠 때 알림 */
+.rv-bar.split .picked span { color: #FFB4A8; white-space: normal; }
+.rv-split { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: rgba(255, 180, 168, .16); color: #FFD5CC; font-weight: 700; font-size: 14px; }
+.rv-mailfail { margin: 0; padding: 10px 12px; border-radius: 10px; background: #FFF1E6; border: 1px solid #F0B48A; color: #6B3A16; font-size: 15px; line-height: 1.6; }
+/* 손가락으로 누르는 화면(휴대폰·태블릿): 좌석 버튼을 36px 로 키움 (위치 지도로 이동) */
+@media (pointer: coarse) { .rv-scroll #rv-hall { --seat: 36px; } }

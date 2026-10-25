@@ -63,6 +63,66 @@ var RSV = (function () {
     return ra !== rb ? ra - rb : (+a.slice(1)) - (+b.slice(1));
   }
 
+  /* ---------- 단체 자동 선택 ----------
+     누른 좌석이 있는 줄에서 붙어 있는 빈 좌석을 먼저 고르고, 모자라면 같은 층의 가까운 줄(뒤 → 앞 차례)에서
+     같은 세로 위치에 가깝게 붙은 좌석을 더 고름. 층(1층 A~G / 2층 H~N)·통로(A4, N5~13 자리)·
+     다른 예약 좌석을 넘어가지 않음. O·P 세로 줄은 그 줄 안에서만, 휠체어석은 휠체어석끼리만.
+     free(id): 고를 수 있는 빈 좌석인지 (이미 고른 좌석·예약된 좌석이면 false) */
+  function autoPick(start, count, free) {
+    var r0 = start.charAt(0), n0 = +start.slice(1), wheel = WHEEL.indexOf(start) >= 0;
+    function usable(r, n) {
+      var id = r + n;
+      return !!SEAT_SET[id] && (id === start || free(id)) && (WHEEL.indexOf(id) >= 0) === wheel;
+    }
+    function runsIn(r) {   // 그 줄에서 붙어 있는 빈 좌석 묶음들 (번호가 끊기거나 차 있으면 나뉨)
+      var runs = [], cur = [];
+      rowNums(r).forEach(function (n) {
+        if (usable(r, n) && cur.length && n === cur[cur.length - 1] + 1) cur.push(n);
+        else { if (cur.length) runs.push(cur); cur = usable(r, n) ? [n] : []; }
+      });
+      if (cur.length) runs.push(cur);
+      return runs;
+    }
+    function best(run, k, c, must) {   // run 에서 k석, 가운데가 c 에 가장 가깝게 (must 가 있으면 꼭 포함)
+      k = Math.min(k, run.length);
+      var bs = -1, bd = Infinity;
+      for (var s = 0; s + k <= run.length; s++) {
+        if (must != null && (run[s] > must || run[s + k - 1] < must)) continue;
+        var d = Math.abs((run[s] + run[s + k - 1]) / 2 - c);
+        if (d < bd - 1e-9) { bd = d; bs = s; }
+      }
+      return bs < 0 ? [] : run.slice(bs, bs + k);
+    }
+    var first = runsIn(r0).filter(function (run) { return run.indexOf(n0) >= 0; })[0];
+    if (!first) return [];
+    var w = best(first, count, n0, n0), out = w.map(function (n) { return r0 + n; });
+    if (out.length >= count || SIDES[r0] || wheel) return out;
+    var c = (w[0] + w[w.length - 1]) / 2, i0 = ROWS.indexOf(r0), floor = ROWS.filter(function (r, i) { return (i < 7) === (i0 < 7); });
+    var j0 = floor.indexOf(r0), order = [];
+    for (var d = 1; d < floor.length; d++) { if (floor[j0 + d]) order.push(floor[j0 + d]); if (floor[j0 - d]) order.push(floor[j0 - d]); }
+    order.forEach(function (r) {
+      var need = count - out.length;
+      if (need <= 0) return;
+      function gap(run) { return c < run[0] ? run[0] - c : c > run[run.length - 1] ? c - run[run.length - 1] : 0; }
+      var runs = runsIn(r).sort(function (a, b) {
+        var fa = a.length >= need, fb = b.length >= need;
+        return fa !== fb ? (fa ? -1 : 1) : (gap(a) - gap(b)) || (b.length - a.length);
+      });
+      if (runs.length) best(runs[0], need, c).forEach(function (n) { out.push(r + n); });
+    });
+    return out;
+  }
+  /* 고른 좌석을 붙어 있는 묶음으로 나눔 → ['E5–E17', 'F8–F10'] (한 묶음이면 길이 1) */
+  function seatGroups(seats) {
+    var s = (seats || []).slice().sort(seatSort), out = [], cur = null;
+    s.forEach(function (id) {
+      var r = id.charAt(0), n = +id.slice(1);
+      if (cur && cur.r === r && n === cur.to + 1 && (WHEEL.indexOf(id) >= 0) === (WHEEL.indexOf(r + cur.to) >= 0)) cur.to = n;
+      else { cur = { r: r, from: n, to: n }; out.push(cur); }
+    });
+    return out.map(function (g) { return g.from === g.to ? g.r + g.from : g.r + g.from + '–' + g.r + g.to; });
+  }
+
   /* ---------- 상태 ---------- */
   var ST = { WAIT: '승인 대기', OK: '확정', NO: '거절', CANCEL: '취소', BLOCK: '막음' };
   var STATUSES = [ST.WAIT, ST.OK, ST.NO, ST.CANCEL, ST.BLOCK];
@@ -315,6 +375,9 @@ var RSV = (function () {
   /* ---------- 손님: 예약 신청 ---------- */
   function book(req, env) {
     if (req.website) return { ok: true, id: 'R0000', seats: [] };            // 자동 입력 방지용 숨은 칸
+    // 같은 요청번호로 다시 오면(응답을 못 받고 다시 보낸 경우) 처음 결과를 그대로 돌려줌 → 두 번 접수되지 않음
+    var reqId = str(req.reqId).replace(/[^\w-]/g, '').slice(0, 60), rk = 'rsvreq:' + reqId;
+    if (reqId) { var prev = env.cache.get(rk); if (prev) { try { var p = JSON.parse(prev); p.again = true; return p; } catch (e) {} } }
     if (!(+req.elapsed > 3000)) return fail('slow', '잠시 후 다시 눌러 주세요.');
     var cfg = settings(env), show = findShow(str(req.show));
     if (!show) return fail('show', '공연 회차를 골라 주세요.');
@@ -370,8 +433,20 @@ var RSV = (function () {
     env.cache.put(rl, String(n + 1), 3600);
     var rec = out.rec; delete out.rec;
     mailAdmin(env, '[좌석 예약 신청] ' + showLabel(rec.show) + ' · ' + rec.name + ' · ' + rec.seats.length + '석', rec, '새 좌석 예약 신청이 들어왔습니다. (승인 대기)');
-    out.mailed = !mailReceived(env, rec);
+    var merr = mailReceived(env, rec);
+    out.mailed = !merr;
+    if (merr) logOn(env, rec.id, env.now() + ' 접수 메일', merr);   // 실패만 기록 (관리 화면에서 다시 보내기)
+    if (reqId) env.cache.put(rk, JSON.stringify(out), 1800);
     return out;
+  }
+  /* 예약 한 건의 메일 기록에 한 줄 더함 */
+  function logOn(env, id, what, err) {
+    try {
+      env.lock(function () {
+        var recs = readAll(env), x = recs.filter(function (r) { return r.id === id; })[0];
+        if (x) { logMail(x, what, err); writeAll(env, recs); }
+      });
+    } catch (e) {}
   }
 
   /* ---------- 손님: 내 예약 (이메일 + 비밀번호) ---------- */
@@ -622,7 +697,12 @@ var RSV = (function () {
   }
   function resend(req, env) {
     return adminUpdate(req, env, function (x) {
-      if (x.status !== ST.OK) return fail('status', '확정된 예약만 확정 메일을 다시 보낼 수 있어요.');
+      if (x.status === ST.WAIT) {   // 승인 대기: 신청 접수 메일을 다시
+        var e0 = mailReceived(env, x);
+        logMail(x, env.now() + ' 접수 메일(다시)', e0);
+        return e0 ? fail('mail', e0) : { ok: true, x: x };
+      }
+      if (x.status !== ST.OK) return fail('status', '승인 대기나 확정된 예약만 메일을 다시 보낼 수 있어요.');
       var err = mailConfirm(env, x);
       logMail(x, env.now() + ' 확정 메일(다시)', err);
       return err ? fail('mail', err) : { ok: true, x: x };
@@ -786,7 +866,7 @@ var RSV = (function () {
   }
 
   return {
-    EVENT: EVENT, HOLD_SEC: HOLD_SEC, ROWS: ROWS, SIDES: SIDES, WHEEL: WHEEL, SEATS: SEATS, ST: ST, STATUSES: STATUSES, SCHEMA: SCHEMA,
+    EVENT: EVENT, HOLD_SEC: HOLD_SEC, autoPick: autoPick, seatGroups: seatGroups, ROWS: ROWS, SIDES: SIDES, WHEEL: WHEEL, SEATS: SEATS, ST: ST, STATUSES: STATUSES, SCHEMA: SCHEMA,
     rowNums: rowNums, floorOf: floorOf, seatName: seatName, seatWhere: seatWhere, seatSort: seatSort, showLabel: showLabel, dateLabel: dateLabel, timeLabel: timeLabel, findShow: findShow,
     handle: handle
   };
