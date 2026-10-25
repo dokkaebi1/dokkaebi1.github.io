@@ -371,7 +371,8 @@ dialog::backdrop { background: rgba(10, 8, 6, .92); }
 .contact__links .btn { min-height: 44px; font-size: 15px; }
 
 dialog.form-dialog { max-width: min(680px, 94vw); max-height: 92vh; overflow: auto; }
-dialog.form-dialog .dlg-close { position: sticky; float: right; top: 8px; margin: 8px 8px 0 0; z-index: 2; }
+dialog.form-dialog .dlg-close { position: sticky; float: right; top: 8px; margin: 8px 8px 0 0; z-index: 2; background: var(--ink); color: #fff; box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); }
+dialog.form-dialog .dlg-close:hover, dialog.form-dialog .dlg-close:focus-visible { background: var(--red-btn); }
 
 .fab { position: fixed; right: 18px; bottom: 18px; z-index: 40; background: var(--red-btn); color: #fff; text-decoration: none; font-weight: 800; font-size: 15px; padding: 14px 20px; border-radius: 999px; box-shadow: 0 12px 30px -10px rgba(0, 0, 0, .6); }
 .fab:hover { background: var(--red-d); }

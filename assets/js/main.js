@@ -16,15 +16,23 @@
   // 모바일 메뉴
   var toggle = document.querySelector(".nav-toggle");
   if (toggle) {
-    toggle.addEventListener("click", function () {
-      var open = header.classList.toggle("is-open");
+    function setMenu(open) {
+      header.classList.toggle("is-open", open);
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      toggle.setAttribute("aria-label", open ? "메뉴 닫기" : "메뉴 열기");
+    }
+    toggle.addEventListener("click", function () {
+      setMenu(!header.classList.contains("is-open"));
     });
     document.querySelectorAll(".nav a").forEach(function (a) {
-      a.addEventListener("click", function () {
-        header.classList.remove("is-open");
-        toggle.setAttribute("aria-expanded", "false");
-      });
+      a.addEventListener("click", function () { setMenu(false); });
+    });
+    // Esc 키로 메뉴 닫고 메뉴 버튼으로 초점 돌려주기
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && header.classList.contains("is-open")) {
+        setMenu(false);
+        toggle.focus();
+      }
     });
   }
 
