@@ -569,12 +569,13 @@ var RSV = (function () {
 
   function isAdmin(req, env) { var t = str(req.token); return !!t && !!env.isAdmin && !!env.isAdmin(t); }
   function adminData(env) {
-    var cfg = settings(env), recs = sweptRecs(env), occ = occupancy(recs), quota = null, sheetUrl = '';
+    var cfg = settings(env), recs = sweptRecs(env), occ = occupancy(recs), quota = null, mailVia = null, sheetUrl = '';
     try { if (env.mailQuota) quota = env.mailQuota(); } catch (e) {}
+    try { if (env.mailVia) mailVia = env.mailVia(); } catch (e) {}   // { name, limit, from } 메일을 어디로 보내는지
     try { if (env.sheetUrl) sheetUrl = env.sheetUrl(); } catch (e) {}
     return {
       ok: true, now: env.now(), today: env.today(), ver: env.props.get('RSV_VER') || '0', settings: cfg, event: EVENT,
-      notifyEmail: notifyTo(env), mailQuota: quota, sheetUrl: sheetUrl, adminId: env.adminCred ? str((env.adminCred() || {}).id) : '',
+      notifyEmail: notifyTo(env), mailQuota: quota, mailVia: mailVia, sheetUrl: sheetUrl, adminId: env.adminCred ? str((env.adminCred() || {}).id) : '',
       shows: EVENT.shows.map(function (s) { return showState(s, env, cfg, occ); }),
       holds: holdMap(env, ''),
       list: recs.map(adminView).reverse()

@@ -293,7 +293,10 @@
       + '<button type="button" class="rv-btn rv-btn-line rv-btn-sm" style="justify-self:start" data-reset-all>예약 전체 초기화</button></div>'
       + '<dl class="ad-dl ad-info">'
       + '<div><dt>새 신청 알림 메일</dt><dd>' + esc(d.notifyEmail || '(없음)') + ' <small>바꾸려면 기존 관리자 페이지 › 설정</small></dd></div>'
-      + '<div><dt>오늘 남은 메일 발송</dt><dd>' + (d.mailQuota == null ? '확인 불가' : d.mailQuota + '통') + ' <small>구글 무료 계정은 하루 100통까지 보낼 수 있어요</small></dd></div>'
+      + '<div><dt>오늘 남은 메일 발송</dt><dd>' + (d.mailQuota == null ? '확인 불가' : d.mailQuota + '통')
+        + (d.mailVia && d.mailVia.name === 'Brevo'
+          ? ' <small>Brevo 무료 하루 ' + d.mailVia.limit + '통 · 보내는 주소 ' + esc(d.mailVia.from) + '. 받는 사람 1명이 1통이에요. Brevo가 안 되면 구글(하루 100통)로 보내요.</small>'
+          : ' <small>구글 무료 계정은 하루 100통까지 보낼 수 있어요</small>') + '</dd></div>'
       + '<div><dt>예약 자료</dt><dd>' + (d.sheetUrl ? '<a href="' + esc(d.sheetUrl) + '" target="_blank" rel="noopener">구글 시트 ‘좌석예약’ 탭 열기</a>' : '-') + '</dd></div>'
       + '<div><dt>손님용 주소</dt><dd><a href="./" target="_blank">공연 안내</a> · <a href="seats.html" target="_blank">좌석 예약</a> · <a href="my.html" target="_blank">내 예약 확인 · 입장</a></dd></div>'
       + '<div><dt>문자 알림</dt><dd>문자 발송은 유료라 연결하지 않았어요. 확정 안내는 이메일로 갑니다.</dd></div>'

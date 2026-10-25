@@ -174,7 +174,11 @@
       var w = g.scrollWidth, avail = box.clientWidth;
       if (w > avail) { var k = avail / w; g.style.transform = 'scale(' + k + ')'; box.style.height = Math.ceil(g.scrollHeight * k) + 'px'; }
     }
-    if (opts.fit) { requestAnimationFrame(fit); window.addEventListener('resize', fit); }
+    if (opts.fit) {
+      requestAnimationFrame(fit); window.addEventListener('resize', fit); window.addEventListener('load', fit);
+      var fbox = host.parentElement, fw = 0;   // 상자 너비가 늦게 정해져도 다시 맞춤
+      if (window.ResizeObserver && fbox) new ResizeObserver(function () { if (fbox.clientWidth !== fw) { fw = fbox.clientWidth; fit(); } }).observe(fbox);
+    }
     return { update: update, flash: flash, seats: seats, scrollTo: scrollTo, center: center, redraw: function () { if (mini) mini.draw(); } };
   }
   /* 문의 전화 링크들 (여러 번호) */
