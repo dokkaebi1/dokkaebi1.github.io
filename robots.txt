@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /admin.html
 
-Sitemap: https://dokkaebi1.github.io/sitemap.xml
+Sitemap: https://doggaebee.kr/sitemap.xml

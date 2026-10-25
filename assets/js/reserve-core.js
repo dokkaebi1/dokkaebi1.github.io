@@ -156,7 +156,7 @@ var RSV = (function () {
     if (!settings(env).arriveTest && recs.some(isTestArrival)) { clearTestArrivals(env); recs = readAll(env); }
     return recs;
   }
-  function siteUrl(env) { return str(env.siteUrl || 'https://dokkaebi1.github.io').replace(/\/+$/, ''); }
+  function siteUrl(env) { return str(env.siteUrl || 'https://doggaebee.kr').replace(/\/+$/, ''); }
   function notifyTo(env) { try { return env.notifyEmail ? str(env.notifyEmail()) : ''; } catch (e) { return ''; } }
   function adminLink(env) { return siteUrl(env) + '/reserve/admin.html'; }   // 홈페이지 예약 관리 (아이디·비밀번호)
   function contactLines() { return ['공연 문의: ' + EVENT.phone + ' · 예약 문의 메일: ' + EVENT.email, '예약 시스템(홈페이지) 문의: ' + EVENT.sysPhone]; }
