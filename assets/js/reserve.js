@@ -8,7 +8,8 @@
   var R = window.RSV, U = window.RSVUI, esc = U.esc;
   var S = { data: null, show: null, need: 1, wheel: 0, t0: Date.now(), map: null, busy: false, centered: false, skew: 0 };
   var PEND = 'dk-rsv-pending';   // 보냈지만 답을 못 받은 신청 { reqId, key }
-  var POLL_MS = 5000;
+  // 좌석 현황 새로 읽기: 예약 오픈 전 1분, 오픈 뒤 15초 (접속자가 많아도 서버 한도에 걸리지 않게)
+  function pollMs() { return notYet() ? 60000 : 15000; }
   /* 이 화면(브라우저 탭)의 이름표: 요청번호 앞부분에 씀 */
   var HOLDER = (function () {
     var k = 'dk-rsv-holder', v = null;
@@ -81,7 +82,8 @@
   }
   setInterval(function () {
     if (!S.data || !S.data.notYet) return;
-    if (now() >= openMs()) { S.data.notYet = false; load(); } else renderOpen();
+    // 오픈 시각이 되면 화면부터 열고, 좌석 현황은 0~3초 사이에 흩어서 읽음 (모든 접속자가 같은 순간에 서버를 부르지 않게)
+    if (now() >= openMs()) { S.data.notYet = false; render(); setTimeout(load, Math.random() * 3000); } else renderOpen();
   }, 1000);
 
   /* ---------- 인원 · 휠체어 이용 인원 ---------- */
@@ -186,7 +188,7 @@
     return U.api('rsvBookStatus', { reqId: p.reqId }).then(function (r) {
       if (!r.ok) return Promise.reject(r);
       if (r.found) { pendSet(null); return r; }
-      if (Date.now() - (p.at || 0) < PEND_WAIT) return { wait: true };
+      if (Date.now() - (p.at || 0) < PEND_WAIT) return { wait: true, left: PEND_WAIT - (Date.now() - p.at) };
       pendSet(null);
       return null;
     });
@@ -210,7 +212,8 @@
     U.$('[data-mail-unknown]', dlg).hidden = !live || r.mailed === true || r.mailed === false;
     U.$('[data-no]', dlg).textContent = r.id;
     U.$('[data-what]', dlg).textContent = r.showLabel + ' · ' + r.seats.length + '명' + (r.again ? ' (앞서 보낸 신청)' : '');
-    U.$('[data-mail]', dlg).textContent = email || '';
+    // 이메일을 모르면(앞서 보낸 신청을 다시 확인한 경우) 주소 대신 '예약할 때 적은 이메일로'
+    U.$('[data-mail-to]', dlg).innerHTML = email ? '<b>' + esc(email) + '</b>으로' : '예약할 때 적은 이메일로';
     showAssigned(r.seats);
     if (!dlg.open) dlg.showModal();
     setTimeout(function () { U.$('.done-pane h3', dlg).focus(); }, 30);
@@ -249,7 +252,12 @@
     // 앞서 답을 못 받은 신청이 있으면: 같은 내용이면 같은 요청번호로 다시, 내용이 바뀌었으면 먼저 접수됐는지 확인
     var ready = p && p.key === key ? Promise.resolve(p.reqId)
       : checkPending().then(function (prev) {
-        if (prev && prev.wait) { idle(); err.innerHTML = '앞서 보낸 신청이 접수됐는지 아직 확인 중이에요. 1~2분 뒤 다시 눌러 주시거나 <a href="my.html" target="_blank">내 예약 확인</a>을 먼저 봐 주세요.'; return null; }
+        if (prev && prev.wait) {
+          idle();
+          err.innerHTML = '앞서 보낸 신청이 접수됐는지 아직 확인 중이에요. 처음 적은 내용 그대로 다시 누르면 바로 이어서 처리돼요(두 번 접수되지 않아요). '
+            + '내용을 바꿔 새로 신청하려면 약 ' + Math.max(1, Math.ceil(prev.left / 60000)) + '분 뒤에 다시 눌러 주세요. 그 사이 <a href="my.html" target="_blank">내 예약 확인</a>에서 접수됐는지 볼 수 있어요.';
+          return null;
+        }
         if (prev) { idle(); showDone(prev, ''); U.toast('앞서 보낸 신청이 이미 접수돼 있어요. 바꾸려면 담당자에게 연락해 주세요.', true); return null; }
         return newReqId();
       }, function () { return Promise.reject({ ok: false, code: 'network' }); });
@@ -258,7 +266,7 @@
       pendSet({ reqId: reqId, key: key, at: (pendGet() || {}).reqId === reqId ? pendGet().at : Date.now() });
       var body = {
         v: R.API_V, show: S.show, count: S.need, wheel: S.wheel, name: f.name.value, org: f.org.value, phone: f.phone.value, email: f.email.value,
-        password: f.password.value, note: f.note.value, consent: f.consent.checked, website: f.website.value, elapsed: Date.now() - S.t0, reqId: reqId
+        password: f.password.value, note: f.note.value, consent: f.consent.checked, dk_check: f.dk_check ? f.dk_check.value : '', elapsed: Date.now() - S.t0, reqId: reqId
       };
       function send(tries) {   // 응답이 없으면 같은 요청번호로 한 번 더 (서버가 이미 받았으면 그 결과가 돌아옴)
         return U.api('rsvBook', body).then(function (r) {
@@ -271,6 +279,8 @@
         // 결과가 분명할 때만 요청번호를 잊음. 응답 없음·저장 확인 못 함(unsure)·서버 오류는 같은 요청번호를 그대로 둠 (다시 누르면 이어서 처리)
         var unsure = r.code === 'timeout' || r.code === 'network' || r.code === 'unsure' || r.code === 'server';
         if (!unsure) pendSet(null);
+        // 성공이라는데 배정 좌석이 없으면 접수된 것이 아님 (숨은 칸이 자동으로 채워진 경우 등) → 완료창 대신 안내
+        if (r.ok && !(r.seats && r.seats.length && r.showLabel)) { err.textContent = '신청이 접수되지 않았어요. 화면을 새로고침(⟳)한 뒤 다시 신청해 주세요. 계속 안 되면 예약 시스템 문의 ' + R.EVENT.sysPhone + '로 연락해 주세요.'; return; }
         if (r.ok) {
           showDone(r, f.email.value.trim());
           form.reset();
@@ -299,5 +309,5 @@
   // 새로고침·다시 들어왔을 때: 답을 못 받은 신청이 있으면 접수됐는지 먼저 확인해서 보여 줌
   if (pendGet()) checkPending().then(function (prev) { if (prev && !prev.wait) showDone(prev, ''); }, function () {});
 
-  U.poll(load, POLL_MS);
+  U.poll(load, pollMs);
 })();

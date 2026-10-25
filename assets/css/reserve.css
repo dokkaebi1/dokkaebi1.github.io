@@ -246,6 +246,9 @@ html { -webkit-text-size-adjust: 100%; }
 .ticket .seatlist .code { font-weight: 900; font-size: clamp(24px, 6vw, 32px); color: var(--jjok); min-width: 2.6em; letter-spacing: -.01em; }
 .ticket .seatlist .nm { font-weight: 800; font-size: 17px; color: var(--ink); display: block; }
 .ticket .seatlist .wh { font-size: 14px; color: var(--text-soft); display: block; }
+.ticket .seatlist.groups { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.ticket .seatmore summary { cursor: pointer; font-weight: 800; color: var(--red-d); padding: 8px 0; min-height: 44px; display: flex; align-items: center; }
+.ticket .seatmore[open] summary { margin-bottom: 8px; }
 .ticket .mid { padding: 16px 22px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .ticket .mini { --seat: 19px; --seat-gap: 2px; min-width: 0; }   /* 좌석표 너비가 상자를 넓히지 않게 (휴대폰에서 통째로 줄여 보임) */
 .ticket .mini .seat { font-size: 0; border-radius: 4px; border-width: 1px; }
@@ -311,6 +314,12 @@ html { -webkit-text-size-adjust: 100%; }
 .ad-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
 .ad-card-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ad-name { font-size: 18px; color: var(--ink); }
+/* 승인 대기 고르기 · 한꺼번에 거절 · 수상한 신청 표시 */
+.ad-sel { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; min-height: 32px; }
+.ad-sel input { width: 22px; height: 22px; accent-color: var(--red-btn); margin: 0; }
+.ad-bulk { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 0 0 12px; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 12px; background: #fff; font-size: 15px; }
+.ad-flag { font-size: 13px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: var(--wait); color: var(--wait-ink); }
+.ad-flag.warn { background: #FBE3E3; color: var(--red-d); }
 .ad-id { margin-left: auto; font-size: 13px; color: var(--text-soft); font-weight: 700; letter-spacing: .03em; }
 .ad-seats { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 10px 12px; border-radius: 10px; background: var(--ink); color: var(--on-ink); }
 .ad-seats b { color: var(--gold); font-size: 18px; }
@@ -342,7 +351,7 @@ html { -webkit-text-size-adjust: 100%; }
 .ad-row .t { color: var(--arr); font-weight: 800; }
 .ad-row.hl { box-shadow: 0 0 0 3px var(--red); }
 .ad-gate-list:has(.ad-row) { max-height: 70vh; overflow: auto; }
-@media (max-width: 1000px) { .ad-split, .ad-split.gate { grid-template-columns: 1fr; } .ad-side { position: static; } }
+@media (max-width: 1000px) { .ad-split, .ad-split.gate { grid-template-columns: minmax(0, 1fr); } .ad-side { position: static; } }
 @media (max-width: 600px) { .ad-gate-stats b { font-size: 26px; } .ad-row { grid-template-columns: 1fr auto; } .ad-row .rv-link { grid-column: 2; } }
 
 /* 좌석 예약 페이지 머리 (seats.html) */

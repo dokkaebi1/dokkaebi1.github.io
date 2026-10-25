@@ -228,12 +228,35 @@ var RSV = (function () {
   /* 저장은 바뀐 예약 줄만 고칩니다 (전체를 지우고 다시 쓰지 않음 → 쓰다가 실패해도 다른 예약은 그대로) */
   function readAll(env) { return env.store.read('rsv').map(toRec).filter(function (x) { return x.id; }); }
   function addRec(env, x) { env.store.append('rsv', fromRec(x)); bump(env); }
-  function saveRecs(env, list) { list.forEach(function (x) { env.store.update('rsv', fromRec(x)); }); if (list.length) bump(env); }
+  /* quiet: 좌석·상태가 그대로인 저장(메일 기록 등)은 좌석 현황 캐시를 버리지 않음 (오픈 때 서버 부담을 줄이려고) */
+  function saveRecs(env, list, quiet) {
+    if (!list.length) return;
+    if (list.length > 1 && env.store.updateMany) env.store.updateMany('rsv', list.map(fromRec));
+    else list.forEach(function (x) { env.store.update('rsv', fromRec(x)); });
+    if (!quiet) bump(env);
+  }
   function removeRecs(env, ids) { if (ids.length) { env.store.remove('rsv', ids); bump(env); } }
   /* 좌석 현황 캐시 이름(버전)을 바꿈. 이것이 실패해도 저장한 예약은 그대로이고 캐시는 2분 뒤 저절로 새로 읽음 */
   function bump(env) {
     try { env.props.set('RSV_VER', String((+env.props.get('RSV_VER') || 0) + 1)); }
     catch (e) { if (typeof console !== 'undefined') console.error('RSV_VER 저장 실패: ' + (e && e.message)); }
+    dropCfg(env);
+  }
+  /* 좌석 현황 조회(손님 화면이 몇 초마다 부름)는 설정값을 캐시(15초)에서 읽음 → 구글 '설정 읽기' 하루 한도(일반 계정 5만 회)를 아낌.
+     예약·설정이 바뀌면(bump) 캐시를 지우므로 늦어도 15초 안에 새 값을 봄 */
+  var CFG_KEYS = ['RSV_VER', 'RSV_MAX2', 'RSV_ARRIVE_TEST', 'RSV_OPEN_AT', 'RSV_OPEN'];
+  function dropCfg(env) { try { env.cache.remove('rsv:cfg'); } catch (e) {} }
+  function pollEnv(env) {
+    var o = null;
+    try { o = JSON.parse(env.cache.get('rsv:cfg') || 'null'); } catch (e) { o = null; }
+    if (!o) {
+      o = {}; CFG_KEYS.forEach(function (k) { o[k] = env.props.get(k); });
+      try { env.cache.put('rsv:cfg', JSON.stringify(o), 15); } catch (e) {}
+    }
+    var p = env.props, e2 = {};
+    for (var k in env) e2[k] = env[k];
+    e2.props = { get: function (k) { return o.hasOwnProperty(k) ? o[k] : p.get(k); }, set: p.set, setMany: p.setMany };
+    return e2;
   }
   /* 손님에게 보여 줄 내용 (비밀번호·관리자 메모 제외) */
   function mine(x) {
@@ -333,7 +356,8 @@ var RSV = (function () {
     try {
       var text = lines.join('\n');
       var html = '<div style="font-family:-apple-system,\'Apple SD Gothic Neo\',\'Malgun Gothic\',sans-serif;font-size:15px;line-height:1.7;color:#22302b;max-width:560px">'
-        + lines.map(function (l) { return l === '' ? '<br>' : /^https?:\/\//.test(l) ? '<p style="margin:0"><a href="' + esc(l) + '">' + esc(l) + '</a></p>' : '<p style="margin:0">' + esc(l) + '</p>'; }).join('')
+        // 누를 수 있는 링크는 홈페이지 주소로 시작하는 줄만 (손님이 이름 칸 등에 적은 주소는 링크로 만들지 않음)
+        + lines.map(function (l) { return l === '' ? '<br>' : l.indexOf(siteUrl(env) + '/') === 0 && !/\s/.test(l) ? '<p style="margin:0"><a href="' + esc(l) + '">' + esc(l) + '</a></p>' : '<p style="margin:0">' + esc(l) + '</p>'; }).join('')
         + '</div>';
       env.mail(to, subject, text, Object.assign({ htmlBody: html, name: EVENT.org }, opts || {}));
       return '';
@@ -359,8 +383,10 @@ var RSV = (function () {
     lines.push('', '홈페이지 예약 관리에서 확인하고 승인해 주세요. (아이디·비밀번호로 로그인)', adminLink(env));
     return send(env, to, subject, lines, x.email ? { replyTo: x.email } : null);
   }
+  /* 메일 제목용 좌석: 짧으면 'E5–E17, F8' 처럼 묶어서, 길면 '45석' (메일 제목 250자 한도 — 단체 예약도 메일이 나가게) */
+  function seatSummary(seats) { var g = seatGroups(seats).join(', '); return g.length <= 40 ? g : seats.length + '석'; }
   function mailConfirm(env, x) {
-    return send(env, x.email, '[' + EVENT.org + '] 좌석 예약이 확정되었습니다 · ' + showLabel(x.show) + ' · ' + x.seats.join(', '), [
+    return send(env, x.email, '[' + EVENT.org + '] 좌석 예약이 확정되었습니다 · ' + showLabel(x.show) + ' · ' + seatSummary(x.seats), [
       x.name + '님, 좌석 예약이 확정되었습니다.', ''
     ].concat(ticketLines(x), [
       '',
@@ -423,7 +449,7 @@ var RSV = (function () {
     return null;
   }
   function book(req, env) {
-    if (req.website) return { ok: true, id: 'R0000', seats: [] };            // 자동 입력 방지용 숨은 칸
+    if (req.website || req.dk_check) return { ok: true, id: 'R0000', seats: [] };   // 자동 입력 방지용 숨은 칸 (website 는 예전 화면 이름)
     var reqId = str(req.reqId).replace(/[^\w-]/g, '').slice(0, 60);
     if (+req.v !== API_V || reqId.length < 16) return fail('old', '예약 화면이 새로 바뀌었어요. 화면을 새로고침(⟳)한 뒤 다시 신청해 주세요.');
     if (!(+req.elapsed > 3000)) return fail('slow', '잠시 후 다시 눌러 주세요.');
@@ -520,7 +546,7 @@ var RSV = (function () {
         var x = readAll(env).filter(function (r) { return r.id === id; })[0];
         if (!x) return;
         lines.forEach(function (l) { logMail(x, l[0], l[1]); });
-        saveRecs(env, [x]);
+        saveRecs(env, [x], true);   // 메일 기록만 바뀜 → 좌석 현황 캐시는 그대로
         got = x;
       });
     } catch (e) { if (typeof console !== 'undefined') console.error('메일 기록 실패 ' + id + ': ' + (e && e.message)); }
@@ -593,12 +619,14 @@ var RSV = (function () {
     if (!email && digits.length < 9) return fail('invalid', '예약할 때 적은 이메일이나 휴대전화 번호를 넣어 주세요.');
     // 요청 수 제한: 예약이 있든 없든 같은 기준 (1시간에 3번)
     var fk = 'rsvforgot:' + (email || digits), many = false, hit = null, go = false;
+    // 예약 찾기(시트 읽기)는 잠금 밖에서 — 잠금 안에서는 숫자 세기만 짧게 (아무 메일로나 보내는 요청이 예약 신청을 늦추지 않게)
+    var found = readAll(env).filter(function (x) { return x.pw && x.status !== ST.BLOCK; })
+      .filter(function (x) { return email ? x.email === email : x.phone.replace(/\D/g, '') === digits; })[0] || null;
     env.lock(function () {
       var n = +(env.cache.get(fk) || 0);
       if (n >= 3) { many = true; return; }
       env.cache.put(fk, String(n + 1), 3600);
-      var recs = readAll(env).filter(function (x) { return x.pw && x.status !== ST.BLOCK; });
-      hit = recs.filter(function (x) { return email ? x.email === email : x.phone.replace(/\D/g, '') === digits; })[0] || null;
+      hit = found;
       if (!hit) return;
       var ck = 'rsvcodecnt:g:' + hit.email, c = +(env.cache.get(ck) || 0);   // 받는 이메일 기준 1시간 3통 (이메일·전화 찾기 합쳐서)
       if (c >= 3) return;
@@ -616,6 +644,7 @@ var RSV = (function () {
     if (byPhone) email = normEmail(env.cache.get('rsvcodeph:' + str(req.phone).replace(/\D/g, '')) || '');
     if (!byPhone && !emailOk(email)) return fail('invalid', '이메일 주소를 확인해 주세요.', { errors: { email: '이메일 주소를 확인해 주세요' } });
     if (pw.length < 4 || pw.length > 30) return fail('invalid', '새 비밀번호는 4~30자로 정해 주세요.', { errors: { password: '4~30자로 정해 주세요' } });
+    if (!email || !env.cache.get('rsvcode:g:' + email)) return codeFail();   // 받은 확인 번호가 없으면 잠금 없이 바로 (같은 답)
     var bad = null, mine = [];
     env.lock(function () {   // 확인 번호 확인·소비와 비밀번호 저장을 한 번에 (같은 번호로 동시에 두 번 바꾸지 못하게)
       bad = email ? checkCode(env, 'g:' + email, req.code) : codeFail();
@@ -684,7 +713,7 @@ var RSV = (function () {
     });
     if (res.ok) {
       var x = res.item;
-      var err = mailAdmin(env, '[좌석 예약 취소] ' + showLabel(x.show) + ' · ' + x.name + ' · ' + x.seats.join(', '), x, '예약자가 좌석 예약을 취소했습니다. 좌석은 다시 예약할 수 있게 풀렸습니다.');
+      var err = mailAdmin(env, '[좌석 예약 취소] ' + showLabel(x.show) + ' · ' + x.name + ' · ' + seatSummary(x.seats), x, '예약자가 좌석 예약을 취소했습니다. 좌석은 다시 예약할 수 있게 풀렸습니다.');
       logOn(env, x.id, [[env.now() + ' 취소 알림(담당자)', err]]);
     }
     return res;
@@ -738,6 +767,7 @@ var RSV = (function () {
   function adminReset(req, env) {
     var pw = str(req.password);
     if (pw.length < ADMIN_PW_MIN || pw.length > 60) return fail('invalid', '새 비밀번호는 ' + ADMIN_PW_MIN + '~60자로 정해 주세요.', { errors: { password: ADMIN_PW_MIN + '~60자로 정해 주세요' } });
+    if (!env.cache.get('rsvcode:admin')) return codeFail();   // 받은 확인 번호가 없으면 잠금 없이 바로
     var bad = null, c = null, nc = null;
     env.lock(function () {   // 확인 번호 확인·소비와 새 비밀번호 저장을 한 번에
       bad = checkCode(env, 'admin', req.code);
@@ -849,6 +879,45 @@ var RSV = (function () {
       }
       return fail('decision', '알 수 없는 처리예요.');
     });
+  }
+  /* 승인 대기 신청 여러 건을 한꺼번에 거절 (가짜 대량 신청 정리용). 승인 대기가 아닌 건은 건너뜀.
+     안내 메일은 notify 가 true 일 때만 (가짜 주소로 메일 한도를 쓰지 않게 기본은 보내지 않음) */
+  function decideMany(req, env) {
+    var ids = (Array.isArray(req.ids) ? req.ids : []).map(str).filter(Boolean).slice(0, 300), reason = clean(req.reason, 300);
+    if (str(req.decision) !== 'reject') return fail('decision', '알 수 없는 처리예요.');
+    if (!ids.length) return fail('ids', '거절할 신청을 골라 주세요.');
+    var done = [], want = {};
+    ids.forEach(function (id) { want[id] = true; });
+    env.lock(function () {
+      readAll(env).forEach(function (x) {
+        if (!want[x.id] || x.status !== ST.WAIT) return;
+        x.status = ST.NO; x.decidedAt = env.now();
+        x.memo = clean((x.memo ? x.memo + '\n' : '') + env.now() + ' 한꺼번에 거절' + (reason ? ': ' + reason : ''), 500);
+        done.push(x);
+      });
+      saveRecs(env, done);
+      done.forEach(function (x) { stamp(env, x.id); });
+    });
+    var mailed = 0, failed = 0;
+    if (req.notify === true) {
+      var logs = [];
+      done.forEach(function (x) {
+        if (!x.email) return;
+        var err = mailReject(env, x, reason);
+        if (err) failed++; else mailed++;
+        logs.push([x.id, [env.now() + ' 거절 안내 메일', err]]);
+      });
+      if (logs.length) {
+        try {
+          env.lock(function () {
+            var by = {}; readAll(env).forEach(function (x) { by[x.id] = x; });
+            var list = logs.map(function (l) { var x = by[l[0]]; if (x) logMail(x, l[1][0], l[1][1]); return x; }).filter(Boolean);
+            saveRecs(env, list, true);
+          });
+        } catch (e) { if (typeof console !== 'undefined') console.error('메일 기록 실패: ' + (e && e.message)); }
+      }
+    }
+    return { ok: true, done: done.length, skipped: ids.length - done.length, mailed: mailed, mailFailed: failed };
   }
   /* 메일 다시 보내기: 상태는 바꾸지 않고 보낸 결과만 기록 (실패도 기록) */
   function resend(req, env) {
@@ -963,6 +1032,7 @@ var RSV = (function () {
       moved = go.length;
       EVENT.shows.forEach(function (s) { env.props.set(sideKey(s.id), 'L'); });   // 자동 배정 차례도 처음(왼쪽)부터 (잠금 안에서)
       env.props.set('RSV_ARRIVE_TEST', '0');
+      dropCfg(env);
     }); } catch (e) {
       if (typeof console !== 'undefined') console.error('초기화 중단: ' + (e && e.message));
       return fail('partial', '초기화가 중간에 멈췄어요. 일부 예약만 옮겨졌을 수 있어요. ‘예약 전체 초기화’를 한 번 더 하면 남은 예약부터 이어서 옮겨요(보관 탭에 같은 내용이 두 번 들어가지 않아요).');
@@ -1009,7 +1079,7 @@ var RSV = (function () {
       if (env.ensure) env.ensure();
       var a = str(req.action);
       if (a === 'rsvState') {
-        var st = publicState(env), cf = settings(env);
+        var pe = pollEnv(env), st = publicState(pe), cf = settings(pe);
         st.max = cf.max; st.openAt = cf.openAt; st.openAtLabel = cf.openAtLabel; st.notYet = cf.notYet;   // 캐시와 상관없이 지금 기준
         st.ms = nowMs(env);   // 서버 시계 (화면의 남은 시간을 서버 기준으로 셈)
         return st;
@@ -1032,6 +1102,7 @@ var RSV = (function () {
         switch (a) {
           case 'rsvAdmin': return adminData(env);
           case 'rsvAdminDecide': return decide(req, env);
+          case 'rsvAdminDecideMany': return decideMany(req, env);
           case 'rsvAdminResend': return resend(req, env);
           case 'rsvAdminArrive': return adminArrive(req, env);
           case 'rsvAdminMemo': return adminMemo(req, env);

@@ -158,6 +158,15 @@
     return '<span class="st-badge ' + cls + '">' + esc(x.status === R.ST.OK ? '예약 확정' : x.status) + '</span>';
   }
 
+  /* 내 좌석: 좌석마다 찾아가는 길. 단체(7석 이상)는 묶음(E5–E17)으로 짧게 보이고 자세한 길은 접어 둠
+     → '공연장에 도착했어요' 단추가 화면 아래로 멀리 밀리지 않게 */
+  function seatBox(x) {
+    var full = '<ul class="seatlist">' + x.seats.map(function (s) { return '<li><span class="code">' + esc(s) + '</span><span><span class="nm">' + esc(R.seatName(s)) + '</span><span class="wh">' + esc(R.seatWhere(s)) + '</span></span></li>'; }).join('') + '</ul>';
+    if (x.seats.length <= 6) return '<div class="seatbig"><small>내 좌석 ' + x.seats.length + '석 · 극장 안에서 이렇게 찾아가세요</small>' + full + '</div>';
+    return '<div class="seatbig"><small>내 좌석 ' + x.seats.length + '석 · 붙어 있는 좌석끼리 묶었어요</small><ul class="seatlist groups">'
+      + R.seatGroups(x.seats).map(function (g) { return '<li><span class="code">' + esc(g) + '</span></li>'; }).join('') + '</ul>'
+      + '<details class="seatmore"><summary>좌석마다 극장 안에서 찾아가는 길 보기 (' + x.seats.length + '석)</summary>' + full + '</details></div>';
+  }
   function render() {
     var d = S.data, today = d.today;
     var list = d.list.slice().sort(function (a, b) { return a.show < b.show ? -1 : a.show > b.show ? 1 : 0; });
@@ -171,9 +180,7 @@
         + '<div class="ttl">' + esc(R.EVENT.series) + ' 〈' + esc(R.EVENT.title) + '〉</div>'
         + '<div class="when">' + esc(x.showLabel) + '</div>'
         + '<div class="where">' + esc(R.EVENT.venue) + ' · ' + esc(R.EVENT.address) + '</div></div>'
-        + '<div class="seatbig"><small>내 좌석 ' + x.seats.length + '석 · 극장 안에서 이렇게 찾아가세요</small><ul class="seatlist">'
-        + x.seats.map(function (s) { return '<li><span class="code">' + esc(s) + '</span><span><span class="nm">' + esc(R.seatName(s)) + '</span><span class="wh">' + esc(R.seatWhere(s)) + '</span></span></li>'; }).join('')
-        + '</ul></div>'
+        + seatBox(x)
         + '<div class="mid">' + statusBox(x, today)
         + (active ? '<div class="mini"><div class="rv-scroll" style="padding:4px 0"><div data-mini="' + esc(x.id) + '"></div></div>' + U.legend('mine') + '</div>' : '')
         + '</div>'

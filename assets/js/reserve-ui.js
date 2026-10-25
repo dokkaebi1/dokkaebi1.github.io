@@ -232,14 +232,17 @@
   }
 
   /* 화면이 보일 때만 주기적으로 새로고침 */
+  /* fn 을 ms 마다 부름 (화면이 가려져 있으면 쉼). ms 는 숫자 또는 다음 간격을 돌려주는 함수.
+     접속자가 같은 순간에 몰리지 않게 간격을 ±15% 흩뜨림 */
   function poll(fn, ms) {
     var timer = null, busy = false;
+    function gap() { return (typeof ms === 'function' ? ms() : ms) * (0.85 + Math.random() * 0.3); }
     function tick() {
       clearTimeout(timer);
       if (document.hidden) return;
-      if (busy) { timer = setTimeout(tick, ms); return; }
+      if (busy) { timer = setTimeout(tick, gap()); return; }
       busy = true;
-      Promise.resolve(fn()).catch(function () {}).then(function () { busy = false; timer = setTimeout(tick, ms); });
+      Promise.resolve(fn()).catch(function () {}).then(function () { busy = false; timer = setTimeout(tick, gap()); });
     }
     document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
     tick();

@@ -6,7 +6,7 @@
   var R = window.RSV, U = window.RSVUI, esc = U.esc;
   var KEY = 'dk-rsv-admin';
   var ENTRY = (document.querySelector('meta[name="dokkaebi-rsv-admin"]') || {}).content || '';
-  var S = { gen: 0, busy: {}, poller: null, token: null, data: null, tab: 'list', show: 'all', filter: '승인 대기', q: '', pick: [], focus: null, gate: null, seenWait: null, pending: false, map: null, mapShow: null };
+  var S = { gen: 0, busy: {}, sel: {}, poller: null, token: null, data: null, tab: 'list', show: 'all', filter: '승인 대기', q: '', pick: [], focus: null, gate: null, seenWait: null, pending: false, map: null, mapShow: null };
   var root = U.$('#ad-root');
   var TITLE = document.title;
 
@@ -42,7 +42,7 @@
   }
   function start() {
     root.innerHTML = '<p class="rv-sub">불러오는 중이에요...</p>';
-    if (S.poller) S.poller.now(); else S.poller = U.poll(load, 6000);
+    if (S.poller) S.poller.now(); else S.poller = U.poll(load, 10000);
   }
   /* 관리자 요청: 보낼 때의 로그인(세대·열쇠)이 그대로일 때만 응답을 씀.
      로그아웃했거나 다시 로그인한 뒤 늦게 온 응답(옛 열쇠의 '로그인 필요' 포함)은 버림 */
@@ -58,13 +58,14 @@
     });
   }
 
-  /* ---------- 불러오기 (6초마다) ---------- */
+  /* ---------- 불러오기 (10초마다) ---------- */
   function load() {
     if (!S.token) return Promise.resolve();
     return call('rsvAdmin').then(function (r) {
       var live = U.$('#ad-live');
       if (!r.ok) { if (live) { live.classList.add('off'); live.lastChild.textContent = '연결이 잠시 끊겼어요'; } return; }
-      var changed = !S.data || S.data.ver !== r.ver || S.data.today !== r.today;
+      // 좌석이 그대로인 변경(메일 기록 등)은 버전이 안 바뀌므로 목록 내용도 비교
+      var changed = !S.data || S.data.ver !== r.ver || S.data.today !== r.today || JSON.stringify(S.data.list) !== JSON.stringify(r.list);
       var waits = r.list.filter(function (x) { return x.status === R.ST.WAIT; }).map(function (x) { return x.id; });
       if (S.seenWait) {
         var fresh = waits.filter(function (id) { return S.seenWait.indexOf(id) < 0; });
@@ -128,6 +129,7 @@
     if (S.tab === 'gate') gateView(body);
     if (S.tab === 'set') body.innerHTML = setView();
     applyBusy();
+    applySel();
   }
   /* 처리 중인 단추(예약번호·처리 종류)는 화면을 다시 그려도 잠긴 채로 */
   function applyBusy() {
@@ -173,9 +175,12 @@
     dl.push(['신청', esc(x.createdAt) + (x.decidedAt ? ' · 처리 ' + esc(x.decidedAt) : '')]);
     if (x.arrivedAt) dl.push(['도착', '<b style="color:var(--arr)">' + esc(x.arrivedAt) + '</b>' + (x.testArrival ? ' · 시험 도착 (시험 모드가 꺼지면 저절로 지워져요)' : '')]);
     if (x.mailLog) dl.push(['메일', esc(x.mailLog).replace(/\n/g, '<br>')]);
+    var flags = '', sim = (S.sim || {})[x.id];
+    if (sim) flags += '<span class="ad-flag warn" title="같은 회차에 이름·기관·요청사항이 같은 신청이 있어요. 가짜 신청인지 확인해 주세요.">비슷한 신청 ' + sim + '건</span>';
+    var pick = x.status === R.ST.WAIT ? '<label class="ad-sel"><input type="checkbox" data-sel="' + esc(x.id) + '" aria-label="' + esc((x.name || '') + ' ' + x.id) + ' 고르기"></label>' : '';
     return '<article class="ad-card" data-id="' + esc(x.id) + '">'
-      + '<div class="ad-card-h"><span class="st-badge ' + (x.arrivedAt && x.status === R.ST.OK ? 'arr' : BADGE[x.status]) + '">' + esc(x.arrivedAt && x.status === R.ST.OK ? '확정 · 도착' : x.status) + '</span>'
-      + '<b class="ad-name">' + esc(x.name || '(이름 없음)') + '</b><span class="ad-id">' + esc(x.id) + '</span></div>'
+      + '<div class="ad-card-h">' + pick + '<span class="st-badge ' + (x.arrivedAt && x.status === R.ST.OK ? 'arr' : BADGE[x.status]) + '">' + esc(x.arrivedAt && x.status === R.ST.OK ? '확정 · 도착' : x.status) + '</span>'
+      + '<b class="ad-name">' + esc(x.name || '(이름 없음)') + '</b><span class="ad-id">' + esc(x.id) + '</span>' + flags + '</div>'
       + '<div class="ad-seats"><span>' + esc(R.dateLabel(x.show)) + '</span><b>' + esc(x.seats.join(' · ')) + '</b><span>' + x.seats.length + '석</span></div>'
       + '<dl class="ad-dl">' + dl.map(function (d) { return '<div><dt>' + d[0] + '</dt><dd>' + d[1] + '</dd></div>'; }).join('') + '</dl>'
       + '<label class="rv-fld ad-memo"><span>관리자 메모</span><textarea rows="2" data-memo>' + esc(x.memo) + '</textarea></label>'
@@ -186,13 +191,37 @@
 
   /* ---------- 신청 관리 ---------- */
   var FILTERS = [['승인 대기', [R.ST.WAIT]], ['확정', [R.ST.OK]], ['거절·취소', [R.ST.NO, R.ST.CANCEL]], ['막음', [R.ST.BLOCK]], ['전체', null]];
+  function listBase() { return S.data.list.filter(function (x) { return S.show === 'all' || x.show === S.show; }); }
+  /* 같은 회차의 승인 대기·확정 가운데 이름·기관·요청사항이 같은 신청 수 (가짜 대량 신청을 찾기 쉽게) */
+  function buildSim() {
+    var key = {}, out = {};
+    function norm(v) { return String(v || '').toLowerCase().replace(/\s/g, ''); }
+    var live = S.data.list.filter(function (x) { return x.status === R.ST.WAIT || x.status === R.ST.OK; });
+    live.forEach(function (x) {
+      [['n', norm(x.name), 2], ['o', norm(x.org), 2], ['t', norm(x.note), 4]].forEach(function (k) {
+        if (k[1].length < k[2]) return;
+        var id = x.show + '|' + k[0] + '|' + k[1];
+        (key[id] = key[id] || []).push(x.id);
+      });
+    });
+    Object.keys(key).forEach(function (id) {
+      var g = key[id]; if (g.length < 2) return;
+      g.forEach(function (rid) { out[rid] = Math.max(out[rid] || 0, g.length - 1); });
+    });
+    return out;
+  }
   function listView() {
-    var base = S.data.list.filter(function (x) { return S.show === 'all' || x.show === S.show; });
+    var base = listBase();
+    S.sim = buildSim();
     var html = showChips(S.show, true);
     html += '<div class="ad-filter">' + FILTERS.map(function (f) {
       var n = base.filter(function (x) { return !f[1] || f[1].indexOf(x.status) >= 0; }).length;
       return '<button type="button" class="ad-chip sm" data-filter="' + f[0] + '" aria-pressed="' + (S.filter === f[0]) + '">' + f[0] + ' <b>' + n + '</b></button>';
     }).join('') + '<input class="ad-search" type="search" placeholder="이름·연락처·좌석·예약번호 찾기" value="' + esc(S.q) + '" data-search></div>';
+    return html + '<div id="ad-results">' + resultsHtml(base) + '</div>';
+  }
+  function resultsHtml(base) {
+    var html = '';
     var f = FILTERS.filter(function (x) { return x[0] === S.filter; })[0][1];
     var q = S.q.trim().toLowerCase().replace(/\s/g, '');
     var list = base.filter(function (x) {
@@ -201,8 +230,22 @@
       return (x.name + x.org + x.phone + x.email + x.id + x.seats.join('')).toLowerCase().replace(/\s/g, '').indexOf(q) >= 0;
     });
     if (S.filter === '승인 대기') list = list.slice().reverse();  // 먼저 신청한 순서대로
+    if (list.some(function (x) { return x.status === R.ST.WAIT; })) {
+      html += '<div class="ad-bulk"><label class="ad-sel"><input type="checkbox" data-sel-all> <span>보이는 승인 대기 모두 고르기</span></label>'
+        + '<button type="button" class="rv-btn rv-btn-line rv-btn-sm" data-bulk-reject disabled>고른 신청 거절</button></div>';
+    }
     html += list.length ? '<div class="ad-list">' + list.map(card).join('') + '</div>' : '<p class="mutebox">해당하는 예약이 없어요.</p>';
     return html;
+  }
+  /* 고른 신청 표시: 다시 그린 뒤에도 고른 상태를 유지. 승인 대기가 아니게 된 신청은 빠짐 */
+  function applySel() {
+    if (!S.data) return;
+    var wait = {}; S.data.list.forEach(function (x) { if (x.status === R.ST.WAIT) wait[x.id] = true; });
+    Object.keys(S.sel).forEach(function (id) { if (!wait[id]) delete S.sel[id]; });
+    root.querySelectorAll('input[data-sel]').forEach(function (c) { c.checked = !!S.sel[c.dataset.sel]; });
+    var n = Object.keys(S.sel).length, b = U.$('[data-bulk-reject]'), all = U.$('input[data-sel-all]');
+    if (b) { b.disabled = !n; b.textContent = n ? '고른 신청 ' + n + '건 거절' : '고른 신청 거절'; }
+    if (all) { var boxes = root.querySelectorAll('input[data-sel]'); all.checked = boxes.length > 0 && Array.prototype.every.call(boxes, function (c) { return c.checked; }); }
   }
 
   /* ---------- 좌석 배치도 ---------- */
@@ -463,6 +506,19 @@
       });
       return;
     }
+    if (t.hasAttribute('data-bulk-reject')) {
+      var ids = Object.keys(S.sel);
+      if (!ids.length) return;
+      promptBox('고른 신청 ' + ids.length + '건 거절', '거절 이유 (비워도 돼요 · 관리자 메모에 남아요)', { text: '승인 대기 신청 ' + ids.length + '건을 한꺼번에 거절하고 좌석을 다시 열어요. 가짜 신청이면 안내 메일은 보내지 마세요.', check: '예약자에게 거절 안내 메일 보내기', checkOff: true, ok: ids.length + '건 거절하기' }).then(function (v) {
+        if (!v) return;
+        t.disabled = true;
+        call('rsvAdminDecideMany', { ids: ids, decision: 'reject', reason: v.value, notify: !!v.check }).then(function (r) {
+          if (r.ok) S.sel = {};
+          afterAll(r, r.ok ? r.done + '건을 거절했어요. 좌석이 다시 열렸어요.' + (r.skipped ? ' (그 사이 처리된 ' + r.skipped + '건은 건너뜀)' : '') + (r.mailFailed ? ' 안내 메일 ' + r.mailFailed + '건은 보내지 못했어요.' : '') : '', t);
+        }).catch(function () { t.disabled = false; });
+      });
+      return;
+    }
     if (t.dataset.tab) { S.tab = t.dataset.tab; render(); return; }
     if (t.dataset.show) { S.show = t.dataset.show; S.focus = null; S.pick = []; render(); return; }
     if (t.dataset.gate) { S.gate = t.dataset.gate; render(); return; }
@@ -472,17 +528,27 @@
     if (t.hasAttribute('data-goto-wait')) { S.tab = 'list'; S.filter = '승인 대기'; S.show = S.gate; render(); return; }
     if (t.dataset.act) act(t.dataset.act, t.closest('[data-id]').dataset.id, t);
   });
+  /* 검색: 검색 칸은 그대로 두고 아래 결과만 다시 그림 (한글을 조합하는 중에는 기다렸다가 조합이 끝나면) */
+  function searchNow(inp) {
+    S.q = inp.value;
+    var box = U.$('#ad-results');
+    if (!box) return;
+    box.innerHTML = resultsHtml(listBase());
+    applyBusy();   // 검색으로 다시 그려도 처리 중인 단추는 잠긴 채로
+    applySel();
+  }
   root.addEventListener('input', function (e) {
-    if (e.target.hasAttribute('data-search')) {
-      S.q = e.target.value;
-      var pos = e.target.selectionStart;
-      S.pending = false;
-      U.$('#ad-body').innerHTML = listView();
-      applyBusy();   // 검색으로 다시 그려도 처리 중인 단추는 잠긴 채로
-      var s = U.$('[data-search]'); s.focus(); s.setSelectionRange(pos, pos);
-    }
+    if (!e.target.hasAttribute('data-search') || e.isComposing) return;
+    searchNow(e.target);
   });
+  root.addEventListener('compositionend', function (e) { if (e.target.hasAttribute && e.target.hasAttribute('data-search')) searchNow(e.target); });
   root.addEventListener('change', function (e) {
+    if (e.target.hasAttribute('data-sel')) { if (e.target.checked) S.sel[e.target.dataset.sel] = true; else delete S.sel[e.target.dataset.sel]; applySel(); return; }
+    if (e.target.hasAttribute('data-sel-all')) {
+      var on = e.target.checked;
+      root.querySelectorAll('#ad-results input[data-sel]').forEach(function (c) { if (on) S.sel[c.dataset.sel] = true; else delete S.sel[c.dataset.sel]; });
+      applySel(); return;
+    }
     if (e.target.hasAttribute('data-memo')) {
       var id = e.target.closest('[data-id]').dataset.id;
       call('rsvAdminMemo', { id: id, memo: e.target.value }).then(function (r) { if (r.ok) U.toast('메모를 저장했어요.'); else U.toast(r.message, true); load(); });

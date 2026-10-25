@@ -186,7 +186,15 @@
       var max = new Date(now.getFullYear(), now.getMonth() + 11, 1);
       if (view < max) { view.setMonth(view.getMonth() + 1); render(); }
     });
-    render();
+    // 달력이 화면 가까이 왔을 때 처음 불러옴 (첫 화면만 보고 가는 방문마다 서버를 부르지 않게 — 좌석 예약 오픈 때 서버 부담을 줄임)
+    if ("IntersectionObserver" in window) {
+      label.textContent = view.getFullYear() + "년 " + (view.getMonth() + 1) + "월";
+      var near = new IntersectionObserver(function (es) {
+        if (!es.some(function (e) { return e.isIntersecting; })) return;
+        near.disconnect(); render();
+      }, { rootMargin: "600px 0px" });
+      near.observe(cal);
+    } else render();
   });
 
   // ── 문의 양식이 화면에 보이면 ‘문의하기’ 버튼 숨기기 ─────────

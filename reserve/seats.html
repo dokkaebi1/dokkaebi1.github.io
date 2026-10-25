@@ -26,7 +26,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600..900&display=swap">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="../assets/css/reserve.css?v=1792963947">
+<link rel="stylesheet" href="../assets/css/reserve.css?v=1792971167">
 <meta name="dokkaebi-api" content="https://script.google.com/macros/s/AKfycbw1ukn5kiuJ3rC1IUlTakt7768htxE08COYk8GMvpOcfUWcSVZKUTsxLftt-JXtx4I/exec">
 </head>
 <body class="rv-body">
@@ -121,7 +121,7 @@
         </div>
         <label class="rv-show-pw"><input type="checkbox" data-showpw> 비밀번호 보이기 (적은 비밀번호를 눈으로 확인)</label>
         <label class="rv-fld"><span>요청사항 <small class="help">(선택)</small></span><textarea name="note" maxlength="300" rows="3" placeholder="관람 인원(어른·어린이), 유모차·휠체어 등"></textarea></label>
-        <input class="rv-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input class="rv-hp" name="dk_check" tabindex="-1" autocomplete="off" aria-hidden="true">
         <p class="rv-privacy">수집 항목: 예약자 성함, 기관·단체, 휴대전화, 이메일, 요청사항
 이용 목적: 좌석 예약 확인, 확정 안내 메일, 공연 당일 입장 확인
 보관 기간: 공연이 끝나고 3개월 안에 파기
@@ -135,7 +135,7 @@
         <div><small style="color:var(--text-soft);font-weight:700">예약번호</small><div class="no" data-no></div></div>
         <p style="margin:0;font-weight:700" data-what></p>
         <div class="rv-assigned"><small>배정된 좌석 (신청 순서대로 자동 배정)</small><ul class="seatlist" data-seats></ul><div class="rv-scroll rv-done-map"><div data-done-map></div></div></div>
-        <p style="margin:0;color:var(--text-soft)" data-mail-ok><b data-mail></b>으로 신청 접수 메일을 보냈어요(몇 분 늦게 오거나 스팸함에 들어갈 수 있어요). 담당자가 확인한 뒤 같은 주소로 예약 확정 메일을 보내 드려요. 확정 전까지 좌석은 ‘승인 대기’로 잡혀 있어요. 메일이 없어도 위 <b>예약번호</b>와 ‘내 예약 확인’이 기준이에요.</p>
+        <p style="margin:0;color:var(--text-soft)" data-mail-ok><span data-mail-to></span> 신청 접수 메일을 보냈어요(몇 분 늦게 오거나 스팸함에 들어갈 수 있어요). 담당자가 확인한 뒤 같은 주소로 예약 확정 메일을 보내 드려요. 확정 전까지 좌석은 ‘승인 대기’로 잡혀 있어요. 메일이 없어도 위 <b>예약번호</b>와 ‘내 예약 확인’이 기준이에요.</p>
         <p class="rv-mailfail" data-done-dead hidden>이 예약번호는 지금 <b>예약 상태가 아니에요</b>(취소·거절). 다시 보려면 새로 신청하시거나 예약 문의 <a href="mailto:gumbong777@hanmail.net">gumbong777@hanmail.net</a>로 연락해 주세요.</p>
         <p style="margin:0;color:var(--text-soft)" data-mail-unknown hidden>앞서 보내신 신청이 이미 접수돼 있어요. 위 <b>예약번호</b>를 적어 두시고, ‘내 예약 확인’에서 이메일과 비밀번호로 상태를 확인해 주세요.</p>
         <p class="rv-mailfail" data-mail-fail hidden><b>예약은 정상으로 접수됐어요.</b> 다만 신청 접수 메일은 보내지 못했어요. 위 <b>예약번호</b>를 적어 두시고, ‘내 예약 확인’에서 이메일과 비밀번호로 상태를 볼 수 있어요. 담당자가 확인한 뒤 확정 메일을 다시 보내 드려요. 메일이 계속 안 오면 예약 시스템 문의 <a href="tel:01085841753">010-8584-1753</a>로 연락해 주세요.</p>
@@ -153,8 +153,8 @@
   <b>극단 도깨비</b> · 부산광역시 · 공연 문의 <a href="tel:01051155406">010-5115-5406</a> · <a href="tel:01038378479">010-3837-8479</a> · 예약 문의 메일 <a href="mailto:gumbong777@hanmail.net">gumbong777@hanmail.net</a> · 예약 시스템 문의 <a href="tel:01085841753">010-8584-1753</a><br>
   <a href="admin.html">예약 관리(관리자)</a> · <a href="../privacy.html">개인정보 처리방침</a> · <a href="../index.html">홈페이지</a> · © 2026 극단 도깨비
 </div></footer>
-<script src="../assets/js/reserve-core.js?v=1792963947"></script>
-<script src="../assets/js/reserve-ui.js?v=1792963947"></script>
-<script src="../assets/js/reserve.js?v=1792963947"></script>
+<script src="../assets/js/reserve-core.js?v=1792971167"></script>
+<script src="../assets/js/reserve-ui.js?v=1792971167"></script>
+<script src="../assets/js/reserve.js?v=1792971167"></script>
 </body>
 </html>
