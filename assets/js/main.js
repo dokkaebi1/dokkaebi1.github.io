@@ -124,20 +124,24 @@
   // 사진첩 분류 + 더 보기
   var gallery = document.querySelector(".gallery");
   var more = document.querySelector(".gallery-more");
+  // 처음 접혀 있던 사진. '더 보기'를 누르기 전에는 '전체'로 돌아올 때 다시 접는다
+  var extras = gallery ? Array.prototype.slice.call(gallery.querySelectorAll(".is-extra")) : [];
+  var expanded = false;
   document.querySelectorAll(".filters button").forEach(function (b) {
     b.addEventListener("click", function () {
       var f = b.getAttribute("data-filter");
       document.querySelectorAll(".filters button").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
       gallery.querySelectorAll("a").forEach(function (a) {
         a.classList.toggle("is-hidden", f !== "all" && a.getAttribute("data-cat") !== f);
-        if (f !== "all") a.classList.remove("is-extra");
       });
-      if (more) more.hidden = f !== "all" || !gallery.querySelector(".is-extra");
+      extras.forEach(function (a) { a.classList.toggle("is-extra", f === "all" && !expanded); });
+      if (more) more.hidden = f !== "all" || expanded || !extras.length;
     });
   });
   if (more) {
     more.addEventListener("click", function () {
-      gallery.querySelectorAll(".is-extra").forEach(function (a) { a.classList.remove("is-extra"); });
+      expanded = true;
+      extras.forEach(function (a) { a.classList.remove("is-extra"); });
       more.hidden = true;
     });
   }
