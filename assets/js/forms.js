@@ -132,20 +132,26 @@
       var r = cal.querySelector('input[name="cal-program"]:checked');
       return r ? r.value : fixed;
     }
+    var gen = 0;   // 달을 빠르게 넘길 때 늦게 온 응답이 다른 달에 덧붙지 않게: 마지막 요청만 그림
     function render() {
-      label.textContent = view.getFullYear() + "년 " + (view.getMonth() + 1) + "월";
-      var from = view.getFullYear() + "-" + String(view.getMonth() + 1).padStart(2, "0");
-      grid.innerHTML = WEEK.map(function (w, i) { return '<div class="cal__wd' + (i === 0 ? " is-sun" : i === 6 ? " is-sat" : "") + '">' + w + "</div>"; }).join("");
+      var my = ++gen, y = view.getFullYear(), mo = view.getMonth();   // 이 요청의 달을 고정
+      label.textContent = y + "년 " + (mo + 1) + "월";
+      var from = y + "-" + String(mo + 1).padStart(2, "0");
+      var head = WEEK.map(function (w, i) { return '<div class="cal__wd' + (i === 0 ? " is-sun" : i === 6 ? " is-sat" : "") + '">' + w + "</div>"; }).join("");
+      grid.innerHTML = head;
+      grid.setAttribute("aria-busy", "true");
       var note = cal.querySelector(".cal__note");
       if (!API) { note.textContent = "온라인 접수를 준비하고 있습니다. 일정은 전화로 문의해 주세요."; }
       loadMonths(from).then(function (res) {
+        if (my !== gen) return;   // 그사이 다른 달로 넘어갔으면 버림
+        grid.removeAttribute("aria-busy");
         var dates = (res && res.dates) || {};
         var today = new Date(); today.setHours(0, 0, 0, 0);
-        var first = new Date(view), days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+        var first = new Date(y, mo, 1), days = new Date(y, mo + 1, 0).getDate();
         var html = "";
         for (var i = 0; i < first.getDay(); i++) html += '<div class="cal__day is-empty"></div>';
         for (var d = 1; d <= days; d++) {
-          var day = new Date(view.getFullYear(), view.getMonth(), d), key = ymd(day), wd = day.getDay();
+          var day = new Date(y, mo, d), key = ymd(day), wd = day.getDay();
           var state = dates[key], cls = "cal__day", txt = "", btn = false;
           if (day <= today) { cls += " is-past"; }
           else if (wd === 0 || wd === 6) { cls += " is-weekend"; txt = "전화 문의"; }
@@ -156,7 +162,7 @@
             ? '<button type="button" class="' + cls + '" data-date="' + key + '"><b>' + d + "</b><span>" + txt + "</span></button>"
             : '<div class="' + cls + '"><b>' + d + "</b><span>" + txt + "</span></div>";
         }
-        grid.innerHTML += html;
+        grid.innerHTML = head + html;   // 덧붙이지 않고 통째로 교체
         if (API && !res) note.textContent = "일정을 불러오지 못했습니다. 잠시 후 다시 보거나 전화로 문의해 주세요.";
         grid.querySelectorAll("button[data-date]").forEach(function (b) {
           b.addEventListener("click", function () {
