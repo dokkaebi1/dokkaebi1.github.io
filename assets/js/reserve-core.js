@@ -112,6 +112,27 @@ var RSV = (function () {
     });
     return out;
   }
+  /* ---------- 신청 순서대로 자동 배정 (2026-10-25 바꿈: 손님이 좌석을 고르지 않음) ----------
+     줄마다 왼쪽 구역(1~9번)과 오른쪽 구역(10~17번)으로 나누고, 예약이 들어온 순서대로 구역을 번갈아
+     (첫 예약 왼쪽 → 다음 예약 오른쪽 → 그다음 왼쪽 …) 그 구역의 앞줄부터 빈 좌석을 차례로 채움.
+     예) 12명 → A5~A9, B1~B7 / 다음 16명 → A10~A17, B10~B17 / 다음 예약 → B8, B9, C1 …
+     휠체어석 A1~A3 은 '휠체어 이용 인원'을 적은 만큼만 배정하고 나머지는 비워 둠. O·P 세로 줄도 배정하지 않음.
+     차례 구역에 자리가 모자라면 다른 구역에 다 들어가면 그쪽으로, 아니면 남은 자리를 채우고 다른 구역으로 이어서. */
+  var BLOCK = { L: [], R: [] };
+  ROWS.forEach(function (r) { rowNums(r).forEach(function (n) { if (WHEEL.indexOf(r + n) < 0) BLOCK[n <= 9 ? 'L' : 'R'].push(r + n); }); });
+  function assignSeats(occ, count, wheel, side) {
+    var freeW = WHEEL.filter(function (s) { return !occ[s]; });
+    if (wheel > freeW.length) return { err: 'wheel', left: freeW.length };
+    var need = count - wheel;
+    var first = BLOCK[side === 'R' ? 'R' : 'L'].filter(function (s) { return !occ[s]; });
+    var other = BLOCK[side === 'R' ? 'L' : 'R'].filter(function (s) { return !occ[s]; });
+    if (need > first.length + other.length) return { err: 'full', left: first.length + other.length };
+    if (need > first.length && need <= other.length) { var t = first; first = other; other = t; }
+    var a = first.slice(0, need);
+    return { seats: freeW.slice(0, wheel).concat(a, other.slice(0, need - a.length)) };
+  }
+  function sideKey(showId) { return 'RSV_SIDE_' + showId.replace(/-/g, ''); }
+
   /* 고른 좌석을 붙어 있는 묶음으로 나눔 → ['E5–E17', 'F8–F10'] (한 묶음이면 길이 1) */
   function seatGroups(seats) {
     var s = (seats || []).slice().sort(seatSort), out = [], cur = null;
@@ -384,10 +405,12 @@ var RSV = (function () {
     if (cfg.notYet) return fail('notyet', notYetMsg(cfg));
     if (!cfg.open) return fail('closed', '지금은 예약을 받지 않아요. 궁금한 점은 ' + EVENT.phone + '로 문의해 주세요.');
     if (env.now() >= show.id + ' ' + show.time) return fail('closed', '이 회차는 예약이 끝났어요.');
-    var seats = seatList(req.seats);
-    if (!seats.length) return fail('seats', '좌석을 골라 주세요.');
-    if (seats.some(function (s) { return !SEAT_SET[s]; })) return fail('seats', '없는 좌석이 있어요. 새로고침해 주세요.');
-    if (seats.length > cfg.max) return fail('seats', '한 번에 ' + cfg.max + '명(좌석)까지 예약할 수 있어요.');
+    // 좌석은 서버가 신청 순서대로 배정 (count = 인원, wheel = 그중 휠체어 이용 인원). 예전 화면이 보낸 seats 는 인원으로만 씀
+    var count = Math.floor(+req.count || seatList(req.seats).length), wheel = Math.floor(+req.wheel || 0);
+    if (!(count >= 1)) return fail('seats', '인원을 정해 주세요.');
+    if (count > cfg.max) return fail('seats', '한 번에 ' + cfg.max + '명(좌석)까지 예약할 수 있어요.');
+    if (wheel < 0 || wheel > WHEEL.length || wheel > count) return fail('wheel', '휠체어 이용 인원을 확인해 주세요 (최대 ' + WHEEL.length + '명, 전체 인원 안에서).');
+    var seats = [];
 
     var errors = {};
     var name = clean(req.name, 30), org = clean(req.org, 60), phone = clean(req.phone, 20), email = normEmail(req.email);
@@ -408,16 +431,17 @@ var RSV = (function () {
 
     var out = null;
     env.lock(function () {
-      var recs = readAll(env), occ = occupancy(recs)[show.id];
-      var taken = seats.filter(function (s) { return occ[s]; });
-      if (taken.length) { out = fail('taken', '방금 다른 분이 예약한 좌석이 있어요: ' + taken.join(', '), { taken: taken }); return; }
-      var holds = readHolds(env, show.id), me = str(req.holder);
-      var held = seats.filter(function (s) { return holds[s] && holds[s].h !== me; });
-      if (held.length) { out = fail('taken', '다른 분이 지금 예약하고 있는 좌석이 있어요: ' + held.join(', '), { taken: held }); return; }
+      var recs = readAll(env), occ = occupancy(recs)[show.id], me = str(req.holder);
       var dup = recs.filter(function (x) {
         return x.show === show.id && (x.status === ST.WAIT || x.status === ST.OK) && (x.email === email || x.phone.replace(/\D/g, '') === digits);
       })[0];
       if (dup) { out = fail('dup', '이미 이 회차에 같은 연락처나 이메일로 신청한 예약이 있어요. ‘내 예약 확인’에서 확인해 주세요. 좌석을 더하거나 바꾸려면 ' + EVENT.phone + '로 연락 주세요.'); return; }
+      var side = env.props.get(sideKey(show.id)) === 'R' ? 'R' : 'L';
+      var got = assignSeats(occ, count, wheel, side);
+      if (got.err === 'wheel') { out = fail('wheel', '휠체어석이 ' + got.left + '석 남았어요. 휠체어 이용 인원을 줄여 주세요.'); return; }
+      if (got.err === 'full') { out = fail('full', '이 회차에 남은 좌석이 ' + got.left + '석이라 ' + count + '명은 예약할 수 없어요. 인원을 줄이거나 다른 회차를 골라 주세요.', { left: got.left }); return; }
+      seats = got.seats;
+      env.props.set(sideKey(show.id), side === 'L' ? 'R' : 'L');   // 다음 예약은 반대쪽 구역부터
       var ids = {}; recs.forEach(function (x) { ids[x.id] = true; });
       var id;
       do { id = 'R' + show.id.slice(5).replace('-', '') + '-' + env.uuid().slice(0, 4).toUpperCase(); } while (ids[id]);
@@ -794,6 +818,7 @@ var RSV = (function () {
       moved = recs.length;
       writeAll(env, []);
     });
+    EVENT.shows.forEach(function (s) { env.props.set(sideKey(s.id), 'L'); });   // 자동 배정 차례도 처음(왼쪽)부터
     env.props.set('RSV_ARRIVE_TEST', '0');
     return { ok: true, moved: moved };
   }
@@ -866,7 +891,7 @@ var RSV = (function () {
   }
 
   return {
-    EVENT: EVENT, HOLD_SEC: HOLD_SEC, autoPick: autoPick, seatGroups: seatGroups, ROWS: ROWS, SIDES: SIDES, WHEEL: WHEEL, SEATS: SEATS, ST: ST, STATUSES: STATUSES, SCHEMA: SCHEMA,
+    EVENT: EVENT, HOLD_SEC: HOLD_SEC, assignSeats: assignSeats, BLOCK: BLOCK, autoPick: autoPick, seatGroups: seatGroups, ROWS: ROWS, SIDES: SIDES, WHEEL: WHEEL, SEATS: SEATS, ST: ST, STATUSES: STATUSES, SCHEMA: SCHEMA,
     rowNums: rowNums, floorOf: floorOf, seatName: seatName, seatWhere: seatWhere, seatSort: seatSort, showLabel: showLabel, dateLabel: dateLabel, timeLabel: timeLabel, findShow: findShow,
     handle: handle
   };

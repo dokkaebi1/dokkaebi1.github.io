@@ -560,3 +560,18 @@ html { -webkit-text-size-adjust: 100%; }
 .rv-mailfail { margin: 0; padding: 10px 12px; border-radius: 10px; background: #FFF1E6; border: 1px solid #F0B48A; color: #6B3A16; font-size: 15px; line-height: 1.6; }
 /* 손가락으로 누르는 화면(휴대폰·태블릿): 좌석 버튼을 36px 로 키움 (위치 지도로 이동) */
 @media (pointer: coarse) { .rv-scroll #rv-hall { --seat: 36px; } }
+/* 신청 순서대로 자동 배정 (2026-10-25) */
+.rv-wheel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 12px; font-size: 16px; }
+.rv-wheel select { font: inherit; font-weight: 800; padding: 6px 10px; border-radius: 10px; border: 1.5px solid var(--line); background: #fff; }
+.rv-wheel small { color: var(--text-soft); font-size: 14px; }
+.rv-cta { margin: 18px 0 0; }
+.rv-assigned { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+.rv-assigned small { color: var(--text-soft); font-weight: 800; }
+.rv-assigned .seatlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 15px; }
+.rv-assigned .seatlist b { color: var(--jjok); font-size: 18px; margin-right: 6px; }
+.rv-done-map { overflow: hidden; }
+.rv-done-map .hall { --seat: 19px; --seat-gap: 2px; }
+.rv-done-map .seat { font-size: 0; border-radius: 4px; border-width: 1px; }
+.rv-done-map .seat.me { font-size: 7.5px; }
+.rv-typehint { margin: 10px 0 0; font-size: 15px; color: var(--text-soft); }
+.rv-typehint b { color: var(--ink); }

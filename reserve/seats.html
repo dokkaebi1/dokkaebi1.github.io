@@ -25,7 +25,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600..900&display=swap">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="../assets/css/reserve.css?v=1792913982">
+<link rel="stylesheet" href="../assets/css/reserve.css?v=1792931053">
 <meta name="dokkaebi-api" content="https://script.google.com/macros/s/AKfycbw1ukn5kiuJ3rC1IUlTakt7768htxE08COYk8GMvpOcfUWcSVZKUTsxLftt-JXtx4I/exec">
 </head>
 <body class="rv-body">
@@ -47,14 +47,15 @@
   <div class="rv-wrap"><div class="rv-open" id="rv-open" hidden>
     <b>아직 예약 전이에요</b>
     <span>예약 오픈 <b data-open-at></b> · 남은 시간 <b data-open-left></b></span>
-    <span class="rv-sub">지금은 좌석만 미리 볼 수 있어요. 오픈 전에 <a href="guide.html">예약 방법</a>을 꼭 확인해 주세요.</span>
+    <span class="rv-sub">지금은 좌석 현황만 볼 수 있어요. 오픈 전에 <a href="guide.html">예약 방법</a>을 꼭 확인해 주세요.</span>
   </div></div>
 
   <section class="rv-wrap rv-sec" id="guide" aria-labelledby="rv-g">
     <h2 class="rv-h2" id="rv-g"><span class="num">!</span>꼭 알아 두세요</h2>
     <ul class="rv-rules">
       <li><b>예약은 홈페이지에서만</b> 받아요. 전화 예약은 받지 않아요.</li>
-      <li>좌석을 처음 고른 때부터 <b>5분 안에</b> 신청해야 해요. 시간이 지나면 좌석이 풀려요.</li>
+      <li>좌석은 직접 고르지 않고 <b>신청한 순서대로 자동으로 배정</b>돼요. 앞줄부터 차례로, 한 예약은 줄마다 <b>1~9번 구역</b>과 <b>10~17번 구역</b>을 번갈아 앉혀요. 배정된 좌석은 신청을 마치면 바로 보여요.</li>
+      <li>휠체어석(A1~A3)은 신청할 때 <b>휠체어 이용 인원</b>을 적은 경우에만 배정해요.</li>
       <li>신청하면 바로 <b>신청 접수 메일</b>이 가고 좌석은 ‘승인 대기’로 잡혀요. 담당자가 확인하면 <b>확정 메일</b>이 한 번 더 가요.</li>
       <li>같은 회차에 같은 연락처·이메일로는 한 번만 신청할 수 있어요. 인원은 한 번에 모아서 신청해 주세요.</li>
       <li>공연 당일 극장에 오시면 <a href="my.html">내 예약 확인</a>에서 ‘도착했어요’를 눌러 주세요.</li>
@@ -68,15 +69,17 @@
     <div class="rv-shows" id="rv-shows"><p class="rv-sub">좌석 현황을 불러오는 중이에요...</p></div>
 
     <h2 class="rv-h2" style="margin-top:32px"><span class="num">2</span>인원 정하기</h2>
-    <p class="rv-sub">함께 볼 사람 수를 먼저 정해 주세요. 한 사람에 좌석 하나, 한 번에 최대 <b data-max>100</b>명까지예요.</p>
+    <p class="rv-sub">함께 볼 사람 수(선생님 포함)를 정해 주세요. 한 사람에 좌석 하나, 한 번에 최대 <b data-max>100</b>명까지예요.</p>
     <div class="rv-party" id="rv-party">
       <div class="rv-stepper"><button type="button" data-step="-1" aria-label="한 명 줄이기">−</button><label><input id="rv-n" type="number" inputmode="numeric" min="1" max="100" value="1" aria-label="인원"><span>명</span></label><button type="button" data-step="1" aria-label="한 명 늘리기">+</button></div>
-      <div class="rv-quick"><button type="button" data-set="1">1명</button><button type="button" data-set="2">2명</button><button type="button" data-set="3">3명</button><button type="button" data-set="4">4명</button><button type="button" data-set="5">5명</button><button type="button" data-set="10">10명</button><button type="button" data-set="20">20명</button><button type="button" data-set="30">30명</button><button type="button" data-set="50">50명</button><button type="button" data-set="100">100명</button></div>
-      <label class="rv-auto"><input type="checkbox" id="rv-auto" checked> 좌석 하나를 누르면 붙어 있는 빈 좌석을 인원만큼 자동으로 골라요</label>
+      <div class="rv-quick"><button type="button" data-set="10">10명</button><button type="button" data-set="20">20명</button><button type="button" data-set="30">30명</button><button type="button" data-set="40">40명</button><button type="button" data-set="50">50명</button><button type="button" data-set="60">60명</button><button type="button" data-set="70">70명</button><button type="button" data-set="80">80명</button><button type="button" data-set="90">90명</button><button type="button" data-set="100">100명</button></div>
+      <p class="rv-typehint">✏️ 숫자 칸을 눌러 <b>인원을 직접 적을 수도 있어요</b> (예: 7명, 23명). <b>+ / −</b>로 한 명씩 바꿀 수도 있어요.</p>
+      <label class="rv-wheel">그중 <b>휠체어 이용 인원</b> <select id="rv-wheel" aria-label="휠체어 이용 인원"><option value="0">없음</option><option value="1">1명</option><option value="2">2명</option><option value="3">3명</option></select> <small>휠체어석 A1~A3 (적은 경우에만 배정)</small></label>
     </div>
+    <p class="rv-cta"><button type="button" class="rv-btn rv-btn-red rv-btn-wide" data-apply>예약 신청서 쓰기 →</button></p>
 
-    <h2 class="rv-h2" style="margin-top:32px"><span class="num">3</span>좌석 고르기</h2>
-    <p class="rv-sub">좌석마다 <b>열 글자와 번호</b>(예: <b>A5</b> = A열 5번)가 적혀 있어요. 고른 좌석은 주황색, 다른 분이 예약한 좌석은 회색이에요.</p>
+    <h2 class="rv-h2" style="margin-top:32px"><span class="num">3</span>좌석 현황 보기</h2>
+    <p class="rv-sub">좌석은 <b>신청한 순서대로 자동 배정</b>돼요(앞줄부터, 1~9번 · 10~17번 구역을 번갈아). 아래는 지금 얼마나 찼는지 보는 표예요. 좌석마다 <b>열 글자와 번호</b>(예: <b>A5</b> = A열 5번)가 적혀 있어요.</p>
     <div class="rv-board">
       <div class="rv-boardhead">
         <div id="rv-legend"></div>
@@ -90,8 +93,8 @@
 
 <div class="rv-bar" aria-live="polite">
   <div class="rv-wrap">
-    <div class="picked"><b></b><span></span><em class="rv-timer" data-timer hidden></em></div>
-    <div class="acts"><button type="button" class="rv-btn rv-btn-line rv-btn-sm" data-clear>다시 고르기</button><button type="button" class="rv-btn rv-btn-red" data-apply>예약 신청</button></div>
+    <div class="picked"><b></b><span></span></div>
+    <div class="acts"><button type="button" class="rv-btn rv-btn-red" data-apply>예약 신청</button></div>
   </div>
 </div>
 
@@ -129,6 +132,7 @@
         <span class="st-badge wait">승인 대기</span>
         <div><small style="color:var(--text-soft);font-weight:700">예약번호</small><div class="no" data-no></div></div>
         <p style="margin:0;font-weight:700" data-what></p>
+        <div class="rv-assigned"><small>배정된 좌석 (신청 순서대로 자동 배정)</small><ul class="seatlist" data-seats></ul><div class="rv-scroll rv-done-map"><div data-done-map></div></div></div>
         <p style="margin:0;color:var(--text-soft)" data-mail-ok><b data-mail></b>으로 신청 접수 메일을 보냈어요. 담당자가 확인한 뒤 같은 주소로 예약 확정 메일을 보내 드려요. 확정 전까지 좌석은 ‘승인 대기’로 잡혀 있어요.</p>
         <p class="rv-mailfail" data-mail-fail hidden><b>예약은 정상으로 접수됐어요.</b> 다만 신청 접수 메일은 보내지 못했어요. 위 <b>예약번호</b>를 적어 두시고, ‘내 예약 확인’에서 이메일과 비밀번호로 상태를 볼 수 있어요. 담당자가 확인한 뒤 확정 메일을 다시 보내 드려요. 메일이 계속 안 오면 예약 시스템 문의 <a href="tel:01085841753">010-8584-1753</a>로 연락해 주세요.</p>
         <p style="margin:0;color:var(--text-soft)">공연 당일에는 ‘내 예약 확인’에서 이메일과 비밀번호로 들어와 좌석을 확인하고 ‘도착했어요’를 눌러 주세요.</p>
@@ -145,8 +149,8 @@
   <b>극단 도깨비</b> · 부산광역시 · 공연 문의 <a href="tel:01051155406">010-5115-5406</a> · <a href="tel:01038378479">010-3837-8479</a> · 예약 문의 메일 <a href="mailto:gumbong777@hanmail.net">gumbong777@hanmail.net</a> · 예약 시스템 문의 <a href="tel:01085841753">010-8584-1753</a><br>
   <a href="admin.html">예약 관리(관리자)</a> · <a href="../privacy.html">개인정보 처리방침</a> · <a href="../index.html">홈페이지</a> · © 2026 극단 도깨비
 </div></footer>
-<script src="../assets/js/reserve-core.js?v=1792913982"></script>
-<script src="../assets/js/reserve-ui.js?v=1792913982"></script>
-<script src="../assets/js/reserve.js?v=1792913982"></script>
+<script src="../assets/js/reserve-core.js?v=1792931053"></script>
+<script src="../assets/js/reserve-ui.js?v=1792931053"></script>
+<script src="../assets/js/reserve.js?v=1792931053"></script>
 </body>
 </html>
