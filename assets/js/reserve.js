@@ -232,6 +232,7 @@
     e.preventDefault();
     if (S.busy) return;
     var f = form.elements, errs = {};
+    U.fieldErrors(form, {});   // 앞서 표시한 칸 오류를 먼저 지움 (고친 칸에 옛 오류가 남지 않게)
     if (f.email.value.trim().toLowerCase() !== f.email2.value.trim().toLowerCase()) errs.email2 = '이메일이 서로 달라요. 다시 확인해 주세요';
     if (f.password.value !== f.password2.value) errs.password2 = '비밀번호가 서로 달라요';
     // 보내기 전에 빈 칸·형식 먼저 확인 (서버도 같은 규칙으로 다시 확인)
@@ -248,6 +249,9 @@
     function idle() { S.busy = false; btn.disabled = false; btn.textContent = '예약 신청하기'; }
     S.busy = true; btn.disabled = true; btn.textContent = '보내는 중...';
     err.textContent = '';
+    // 확인을 마친 내용을 지금 고정 (응답을 기다리는 동안 칸을 고쳐도 보내는 내용·완료 안내는 이 값)
+    var snap = { show: S.show, count: S.need, wheel: S.wheel, name: f.name.value, org: f.org.value, phone: f.phone.value, email: f.email.value,
+      password: f.password.value, note: f.note.value, consent: f.consent.checked, dk_check: f.dk_check ? f.dk_check.value : '' };
     var key = contentKey(f), p = pendGet();
     // 앞서 답을 못 받은 신청이 있으면: 같은 내용이면 같은 요청번호로 다시, 내용이 바뀌었으면 먼저 접수됐는지 확인
     var ready = p && p.key === key ? Promise.resolve(p.reqId)
@@ -264,10 +268,7 @@
     ready.then(function (reqId) {
       if (!reqId) return;
       pendSet({ reqId: reqId, key: key, at: (pendGet() || {}).reqId === reqId ? pendGet().at : Date.now() });
-      var body = {
-        v: R.API_V, show: S.show, count: S.need, wheel: S.wheel, name: f.name.value, org: f.org.value, phone: f.phone.value, email: f.email.value,
-        password: f.password.value, note: f.note.value, consent: f.consent.checked, dk_check: f.dk_check ? f.dk_check.value : '', elapsed: Date.now() - S.t0, reqId: reqId
-      };
+      var body = Object.assign({ v: R.API_V, elapsed: Date.now() - S.t0, reqId: reqId }, snap);
       function send(tries) {   // 응답이 없으면 같은 요청번호로 한 번 더 (서버가 이미 받았으면 그 결과가 돌아옴)
         return U.api('rsvBook', body).then(function (r) {
           if ((r.code === 'timeout' || r.code === 'network') && tries < 1) { btn.textContent = '접수됐는지 확인하는 중...'; return new Promise(function (ok) { setTimeout(ok, 2500); }).then(function () { return send(tries + 1); }); }
@@ -282,7 +283,7 @@
         // 성공이라는데 배정 좌석이 없으면 접수된 것이 아님 (숨은 칸이 자동으로 채워진 경우 등) → 완료창 대신 안내
         if (r.ok && !(r.seats && r.seats.length && r.showLabel)) { err.textContent = '신청이 접수되지 않았어요. 화면을 새로고침(⟳)한 뒤 다시 신청해 주세요. 계속 안 되면 예약 시스템 문의 ' + R.EVENT.sysPhone + '로 연락해 주세요.'; return; }
         if (r.ok) {
-          showDone(r, f.email.value.trim());
+          showDone(r, body.email.trim());   // 보낸 그 내용으로 안내 (기다리는 동안 칸을 고쳐도 바뀌지 않음)
           form.reset();
           form.querySelectorAll('input[name^="password"]').forEach(function (i) { i.type = 'password'; });
           S.t0 = Date.now();

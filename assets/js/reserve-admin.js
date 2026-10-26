@@ -102,6 +102,12 @@
     var x = (S.data.shows || []).filter(function (s) { return s.id === show; })[0];
     return x && x.leftGen != null ? ' · 손님 배정 가능: 일반석 ' + x.leftGen + ' · 휠체어석 ' + x.leftWheel : '';
   }
+  /* '보내는 중'으로 5분 넘게 결과가 없는 메일 (막 신청한 것은 아직 보내는 중일 수 있어 5분 기다림) */
+  function stuck(x) {
+    if (!x.mailPending || !S.data) return false;
+    var t = Date.parse(x.mailPending.replace(' ', 'T') + ':00+09:00'), n = Date.parse(S.data.now.replace(' ', 'T') + ':00+09:00');
+    return !isNaN(t) && !isNaN(n) && n - t >= 5 * 60000;
+  }
   function stats(show) {
     var o = { wait: 0, ok: 0, block: 0, arr: 0, okN: 0, arrN: 0 };
     S.data.list.forEach(function (x) {
@@ -156,7 +162,7 @@
     var acts = [];
     if (x.status === R.ST.WAIT) {
       acts.push(['approve', '승인 (확정 메일 보내기)', 'rv-btn-red'], ['reject', '거절', 'rv-btn-line']);
-      if (x.email && /접수 메일[^\n]*✗/.test(x.mailLog || '')) acts.push(['resend', '접수 메일 다시 보내기', 'rv-btn-line']);
+      if (x.email && (/접수 메일[^\n]*✗/.test(x.mailLog || '') || stuck(x))) acts.push(['resend', '접수 메일 다시 보내기', 'rv-btn-line']);
     }
     if (x.status === R.ST.OK) {
       acts.push([x.arrivedAt ? 'unarrive' : 'arrive', x.arrivedAt ? '도착 취소' : '도착 처리', x.arrivedAt ? 'rv-btn-line' : 'rv-btn-ok']);
@@ -174,6 +180,7 @@
     if (x.note) dl.push(['요청사항', esc(x.note)]);
     dl.push(['신청', esc(x.createdAt) + (x.decidedAt ? ' · 처리 ' + esc(x.decidedAt) : '')]);
     if (x.arrivedAt) dl.push(['도착', '<b style="color:var(--arr)">' + esc(x.arrivedAt) + '</b>' + (x.testArrival ? ' · 시험 도착 (시험 모드가 꺼지면 저절로 지워져요)' : '')]);
+    if (stuck(x)) dl.push(['메일 확인 필요', '<b style="color:var(--red,#B21A2D)">‘보내는 중’에서 멈춘 메일이 있어요.</b> 보냈는지 알 수 없어서 저절로 다시 보내지 않아요. 예약자에게 확인하거나 ‘다시 보내기’를 눌러 주세요.']);
     if (x.mailLog) dl.push(['메일', esc(x.mailLog).replace(/\n/g, '<br>')]);
     var flags = '', sim = (S.sim || {})[x.id];
     if (sim) flags += '<span class="ad-flag warn" title="같은 회차에 이름·기관·요청사항이 같은 신청이 있어요. 가짜 신청인지 확인해 주세요.">비슷한 신청 ' + sim + '건</span>';
@@ -244,7 +251,7 @@
     Object.keys(S.sel).forEach(function (id) { if (!wait[id]) delete S.sel[id]; });
     root.querySelectorAll('input[data-sel]').forEach(function (c) { c.checked = !!S.sel[c.dataset.sel]; });
     var n = Object.keys(S.sel).length, b = U.$('[data-bulk-reject]'), all = U.$('input[data-sel-all]');
-    if (b) { b.disabled = !n; b.textContent = n ? '고른 신청 ' + n + '건 거절' : '고른 신청 거절'; }
+    if (b) { b.disabled = !n || !!S.bulkBusy; b.textContent = S.bulkBusy ? '거절하는 중...' : n ? '고른 신청 ' + n + '건 거절' : '고른 신청 거절'; }
     if (all) { var boxes = root.querySelectorAll('input[data-sel]'); all.checked = boxes.length > 0 && Array.prototype.every.call(boxes, function (c) { return c.checked; }); }
   }
 
@@ -427,9 +434,10 @@
     var bk = id + ':' + name;
     if (S.busy[bk]) return;
     var lock = function () { S.busy[bk] = true; if (btn) btn.disabled = true; };
-    var after = function (r, msg) { delete S.busy[bk]; afterAll(r, msg, btn); };
+    var unlockNow = function () { root.querySelectorAll('[data-id="' + id + '"] [data-act="' + name + '"]').forEach(function (b) { b.disabled = false; }); };   // 다시 그려진 단추까지
+    var after = function (r, msg) { delete S.busy[bk]; unlockNow(); afterAll(r, msg, btn); };
     var call = function (a, d) {   // 이 처리의 요청: 응답이 버려지거나 실패해도 처리 중 표시·단추를 정리
-      return callApi(a, d).catch(function (e) { delete S.busy[bk]; if (btn) btn.disabled = false; throw e; });
+      return callApi(a, d).catch(function (e) { delete S.busy[bk]; if (btn) btn.disabled = false; unlockNow(); throw e; });
     };
     if (name === 'approve') { lock(); call('rsvAdminDecide', { id: id, decision: 'approve' }).then(function (r) { after(r, x.email ? '확정하고 확정 메일을 보냈어요.' : '확정했어요.'); }); }
     if (name === 'wait') { lock(); call('rsvAdminDecide', { id: id, decision: 'wait' }).then(function (r) { after(r, '승인 대기로 되돌렸어요.'); }); }
@@ -508,14 +516,16 @@
     }
     if (t.hasAttribute('data-bulk-reject')) {
       var ids = Object.keys(S.sel);
-      if (!ids.length) return;
+      if (!ids.length || S.bulkBusy) return;
       promptBox('고른 신청 ' + ids.length + '건 거절', '거절 이유 (비워도 돼요 · 관리자 메모에 남아요)', { text: '승인 대기 신청 ' + ids.length + '건을 한꺼번에 거절하고 좌석을 다시 열어요. 가짜 신청이면 안내 메일은 보내지 마세요.', check: '예약자에게 거절 안내 메일 보내기', checkOff: true, ok: ids.length + '건 거절하기' }).then(function (v) {
-        if (!v) return;
-        t.disabled = true;
+        if (!v || S.bulkBusy) return;
+        S.bulkBusy = true; t.disabled = true;
+        var done = function () { S.bulkBusy = false; var b = U.$('[data-bulk-reject]'); if (b) b.disabled = !Object.keys(S.sel).length; };
         call('rsvAdminDecideMany', { ids: ids, decision: 'reject', reason: v.value, notify: !!v.check }).then(function (r) {
+          done();
           if (r.ok) S.sel = {};
-          afterAll(r, r.ok ? r.done + '건을 거절했어요. 좌석이 다시 열렸어요.' + (r.skipped ? ' (그 사이 처리된 ' + r.skipped + '건은 건너뜀)' : '') + (r.mailFailed ? ' 안내 메일 ' + r.mailFailed + '건은 보내지 못했어요.' : '') : '', t);
-        }).catch(function () { t.disabled = false; });
+          afterAll(r, r.ok ? r.done + '건을 거절했어요. 좌석이 다시 열렸어요.' + (r.skipped ? ' (그 사이 처리된 ' + r.skipped + '건은 건너뜀)' : '') + (r.mailFailed ? ' 안내 메일 ' + r.mailFailed + '건은 보내지 못했어요.' : '') + (r.mailSkipped ? ' 그 사이 다시 승인된 ' + r.mailSkipped + '건에는 안내 메일을 보내지 않았어요.' : '') : '', t);
+        }).catch(function () { done(); t.disabled = false; });
       });
       return;
     }

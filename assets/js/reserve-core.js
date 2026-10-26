@@ -263,7 +263,7 @@ var RSV = (function () {
     return { id: x.id, show: x.show, showLabel: showLabel(x.show), seats: x.seats, status: x.status, name: x.name, org: x.org, phone: x.phone,
       email: x.email, note: x.note, arrivedAt: x.arrivedAt, testArrival: isTestArrival(x), createdAt: x.createdAt };
   }
-  function adminView(x) { var o = mine(x); o.memo = x.memo; o.decidedAt = x.decidedAt; o.mailLog = x.mailLog; o.hasPw = !!x.pw; return o; }
+  function adminView(x) { var o = mine(x); o.memo = x.memo; o.decidedAt = x.decidedAt; o.mailLog = x.mailLog; o.hasPw = !!x.pw; o.mailPending = anyPending(x); return o; }
 
   /* ---------- 설정 (스크립트 속성) ---------- */
   function settings(env) {
@@ -426,6 +426,26 @@ var RSV = (function () {
     while (log.length > 1500 && log.indexOf('\n') >= 0) log = log.slice(log.indexOf('\n') + 1);
     x.mailLog = log.slice(-1500);
   }
+  /* 발송 작업: 상태를 저장할 때 '시각 무엇 보내는 중' 줄을 같은 줄에 함께 저장하고, 보낸 뒤 결과 줄(✓/✗/안 보냄)을 붙임.
+     결과 없이 '보내는 중'만 남아 있으면 보냈는지 알 수 없는 상태 → 자동으로 다시 보내지 않고 관리 화면에 '메일 확인 필요'로 보여 줌 */
+  function jobStart(env, x, label) { logMail(x, env.now() + ' ' + label + ' 보내는 중', false); }
+  function jobPending(x, label) {
+    var pend = false;
+    str(x.mailLog).split('\n').forEach(function (l) { if (l.indexOf(label) >= 0) pend = /보내는 중$/.test(l); });
+    return pend;
+  }
+  /* 결과 없이 '보내는 중'으로 남은 작업이 있으면 그 시각('yyyy-MM-dd HH:mm'), 없으면 '' */
+  function anyPending(x) {
+    var by = {};   // 종류별 마지막 줄이 '보내는 중'이면 그 시각
+    str(x.mailLog).split('\n').forEach(function (l) {
+      ['담당자 알림', '접수 메일', '확정 메일', '거절 안내 메일'].forEach(function (lb) {
+        if (l.indexOf(lb) >= 0) by[lb] = /보내는 중$/.test(l) ? l.slice(0, 16) : '';
+      });
+    });
+    var at = '';
+    for (var k in by) if (by[k] && (!at || by[k] < at)) at = by[k];
+    return at;
+  }
   /* 접수 메일을 보냈는지 (기록 기준): true 보냄 / false 실패 / null 모름 */
   function receiptMailed(x) { return /접수 메일[^\n]*✓/.test(x.mailLog) ? true : /접수 메일[^\n]*✗/.test(x.mailLog) ? false : null; }
 
@@ -475,19 +495,15 @@ var RSV = (function () {
     if (!env.sha256) return fail('server', '서버 설정이 끝나지 않았어요.');
     // 신청 내용 지문: 회차·인원·휠체어·연락처뿐 아니라 이름·기관·요청사항·비밀번호까지 (하나라도 바뀌면 같은 요청번호로 받지 않음)
     var tag = reqId + ':' + env.sha256(JSON.stringify([show.id, count, wheel, digits, email, name, org, note, pw])).slice(0, 16);   // 칸 경계가 분명하게 (JSON)
+    var oldTag = reqId + ':' + env.sha256([show.id, count, wheel, digits, email, name, org, note, pw].join('|')).slice(0, 16);   // 10/26 오전까지의 지문 (같은 내용 재전송 인정)
 
-    var out = null, rec = null, rl = 'rsvn:' + digits, claim = '';
+    var out = null, rec = null, rl = 'rsvn:' + digits;
     try { env.lock(function () {
       var recs = readAll(env);
       var same = recs.filter(function (x) { return x.req && x.req.split(':')[0] === reqId; })[0];
       if (same) {
-        if (same.req !== tag) { out = fail('reqchanged', '이 화면에서 먼저 보낸 신청(예약번호 ' + same.id + ')과 내용이 달라요. 먼저 ‘내 예약 확인’에서 앞의 신청을 확인한 뒤, 화면을 새로고침하고 다시 신청해 주세요.'); return; }
-        out = bookResult(same, true);
-        // 저장은 됐는데 메일 단계까지 못 간 신청(앞 응답이 중간에 실패)이면 이번에 메일을 보냄 (한 번만: 5분 표시)
-        if (!/(담당자 알림|접수 메일)/.test(same.mailLog) && same.status === ST.WAIT && !env.cache.get('rsvmail:' + same.id)) {
-          claim = 'rsvmail:' + same.id; env.cache.put(claim, '1', 300);
-          rec = same;
-        }
+        if (same.req !== tag && same.req !== oldTag) { out = fail('reqchanged', '이 화면에서 먼저 보낸 신청(예약번호 ' + same.id + ')과 내용이 달라요. 먼저 ‘내 예약 확인’에서 앞의 신청을 확인한 뒤, 화면을 새로고침하고 다시 신청해 주세요.'); return; }
+        out = bookResult(same, true);   // 메일은 다시 보내지 않음: 앞 요청이 '보내는 중'을 남겼으면 그 결과를 따름 (모르면 관리 화면에 '메일 확인 필요')
         return;
       }
       var c2 = settings(env);
@@ -510,20 +526,21 @@ var RSV = (function () {
       rec = { id: id, createdAt: env.now(), show: show.id, seats: got.seats, status: ST.WAIT, name: name, org: org, phone: phone, email: email,
         note: note, memo: got.apart ? env.now() + ' 확인 필요: 휠체어 동행인 일부가 2층 (1층 자리 없음)' : '', arrivedAt: '', decidedAt: '', mailLog: '',
         pw: salt + '$' + env.sha256(salt + ':' + pw), req: tag };
-      claim = 'rsvmail:' + id; env.cache.put(claim, '1', 300);           // 메일 단계 표시는 잠금 안에서 (같은 요청이 잠금 풀리자마자 와도 메일이 두 번 가지 않게)
+      jobStart(env, rec, '접수 메일');                                   // '보내는 중'을 예약 줄과 함께 저장 (캐시가 아니라 시트에 남음)
       addRec(env, rec);                                                   // 이 줄이 저장돼야 접수 (실패하면 여기서 오류)
       try { env.props.set(sideKey(show.id), side === 'L' ? 'R' : 'L'); }  // 저장된 뒤에만 차례를 넘김. 실패해도 접수는 그대로 (다음 예약이 같은 구역부터)
       catch (e) { if (typeof console !== 'undefined') console.error('배정 차례 저장 실패: ' + (e && e.message)); }
       out = bookResult(rec);
     }); } catch (e) {
-      // 저장 마무리(flush 등)에서 실패: 저장됐는지 확실하지 않음 → 메일 표시를 풀어 두고 '결과 불명확'으로 답함.
-      // 화면은 요청번호를 그대로 두고, 같은 내용으로 다시 보내면 저장된 경우 같은 예약 + 빠진 메일, 안 된 경우 새로 접수
-      if (claim) { try { env.cache.remove(claim); } catch (x) {} }
+      // 저장 마무리(flush 등)에서 실패: 시트를 다시 읽어 이 신청 줄이 남았는지 확인 → 남았으면 접수된 것으로 보고 이어서 메일
       if (typeof console !== 'undefined') console.error('예약 저장 마무리 실패: ' + (e && e.message));
-      return fail('unsure', '접수가 끝났는지 확인하지 못했어요. 내용을 바꾸지 말고 ‘예약 신청하기’를 한 번 더 눌러 주세요. 두 번 접수되지 않아요.');
+      var back = null;
+      if (rec) { try { back = readAll(env).filter(function (x) { return x.id === rec.id && x.req === tag; })[0] || null; } catch (x) { back = null; } }
+      if (!back) return fail('unsure', '접수가 끝났는지 확인하지 못했어요. 내용을 바꾸지 말고 ‘예약 신청하기’를 한 번 더 눌러 주세요. 두 번 접수되지 않아요.');
+      rec = back; out = bookResult(back);
     }
-    if (!out.ok || !rec) return out;
-    if (!out.again) { try { env.cache.put(rl, String(+(env.cache.get(rl) || 0) + 1), 3600); } catch (e) {} }
+    if (!out.ok || out.again || !rec) return out;
+    try { env.cache.put(rl, String(+(env.cache.get(rl) || 0) + 1), 3600); } catch (e) {}
     // 여기부터는 예약 저장과 따로: 실패해도 예약은 그대로 (메일 기록에 남고 관리 화면에서 다시 보내기)
     var aerr = mailAdmin(env, '[좌석 예약 신청] ' + showLabel(rec.show) + ' · ' + rec.name + ' · ' + rec.seats.length + '석', rec, '새 좌석 예약 신청이 들어왔습니다. (승인 대기)' + (rec.memo ? '\n' + rec.memo : ''));
     var merr = mailReceived(env, rec), at = env.now();
@@ -540,17 +557,16 @@ var RSV = (function () {
   }
   /* 예약 한 건의 메일 기록에 줄들을 더함: lines = [[무엇, 오류 문구('' 이면 성공)], …]. 고친 예약을 돌려줌 (실패하면 null) */
   function logOn(env, id, lines) {
-    var got = null;
+    var x = null;
     try {
       env.lock(function () {
-        var x = readAll(env).filter(function (r) { return r.id === id; })[0];
+        x = readAll(env).filter(function (r) { return r.id === id; })[0] || null;
         if (!x) return;
         lines.forEach(function (l) { logMail(x, l[0], l[1]); });
         saveRecs(env, [x], true);   // 메일 기록만 바뀜 → 좌석 현황 캐시는 그대로
-        got = x;
       });
-    } catch (e) { if (typeof console !== 'undefined') console.error('메일 기록 실패 ' + id + ': ' + (e && e.message)); }
-    return got;
+    } catch (e) { if (typeof console !== 'undefined') console.error('메일 기록 실패 ' + id + ': ' + (e && e.message)); return null; }   // 마무리(flush) 실패도 '기록 못 함'
+    return x;
   }
 
   /* ---------- 손님: 내 예약 (이메일 + 비밀번호) ---------- */
@@ -610,7 +626,13 @@ var RSV = (function () {
     }
     return null;
   }
-  function codeUsed(env, key) { env.cache.remove('rsvcode:' + key); }
+  function codeUsed(env, key) { var v = env.cache.get('rsvcode:' + key); env.cache.remove('rsvcode:' + key); return v; }
+  /* 저장 마무리(flush)가 실패해 결과를 모를 때: 지운 번호를 남은 시간 그대로 되살림 (같은 번호로 다시 하면 같은 비밀번호로 다시 저장) */
+  function codeRestore(env, key, v) {
+    if (!v) return;
+    try { var o = JSON.parse(v), left = Math.floor(((+o.exp || 0) - nowMs(env)) / 1000); if (left > 0) env.cache.put('rsvcode:' + key, v, left); } catch (e) {}
+  }
+  function unsureReset() { return fail('unsure', '비밀번호가 바뀌었는지 확인하지 못했어요. 같은 확인 번호와 새 비밀번호로 한 번 더 해 주세요.'); }
   /* 이메일 또는 휴대전화 번호로 예약을 찾아, 예약에 적힌 이메일로 확인 번호를 보냄.
      예약이 있든 없든 같은 답을 돌려줌 (다른 사람이 이메일·번호로 예약 여부를 알아낼 수 없게) */
   function guestForgot(req, env) {
@@ -645,8 +667,8 @@ var RSV = (function () {
     if (!byPhone && !emailOk(email)) return fail('invalid', '이메일 주소를 확인해 주세요.', { errors: { email: '이메일 주소를 확인해 주세요' } });
     if (pw.length < 4 || pw.length > 30) return fail('invalid', '새 비밀번호는 4~30자로 정해 주세요.', { errors: { password: '4~30자로 정해 주세요' } });
     if (!email || !env.cache.get('rsvcode:g:' + email)) return codeFail();   // 받은 확인 번호가 없으면 잠금 없이 바로 (같은 답)
-    var bad = null, mine = [];
-    env.lock(function () {   // 확인 번호 확인·소비와 비밀번호 저장을 한 번에 (같은 번호로 동시에 두 번 바꾸지 못하게)
+    var bad = null, mine = [], used = null;
+    try { env.lock(function () {   // 확인 번호 확인·소비와 비밀번호 저장을 한 번에 (같은 번호로 동시에 두 번 바꾸지 못하게)
       bad = email ? checkCode(env, 'g:' + email, req.code) : codeFail();
       if (bad) return;
       mine = readAll(env).filter(function (x) { return x.email === email && x.status !== ST.BLOCK; });
@@ -655,8 +677,8 @@ var RSV = (function () {
         x.pw = salt + '$' + env.sha256(salt + ':' + pw);
       });
       saveRecs(env, mine);
-      codeUsed(env, 'g:' + email);   // 저장까지 끝난 뒤 번호를 지움
-    });
+      used = codeUsed(env, 'g:' + email);   // 저장까지 끝난 뒤 번호를 지움
+    }); } catch (e) { codeRestore(env, 'g:' + email, used); return unsureReset(); }
     if (bad) return bad;
     if (!mine.length) return fail('missing', '이 이메일로 신청한 예약을 찾지 못했어요.');
     env.cache.remove('rsvfail:' + email);
@@ -759,25 +781,32 @@ var RSV = (function () {
   function adminForgot(req, env) {
     var to = notifyTo(env);
     if (!to || !env.setAdminCred) return fail('off', '담당자 메일이 정해지지 않았어요. 구글 로그인으로 들어가 주세요.');
+    var many = false;
+    env.lock(function () {   // 요청 수(1시간 3번)를 잠금 안에서 세어 동시에 와도 넘지 않게
+      var rk = 'rsvcodecnt:admin', n = +(env.cache.get(rk) || 0);
+      if (n >= 3) { many = true; return; }
+      env.cache.put(rk, String(n + 1), 3600);
+    });
+    if (many) return fail('many', '확인 번호를 너무 여러 번 요청했어요. 1시간 뒤 다시 해 주세요.');
     var bad = sendCode(env, 'admin', to, '[' + EVENT.org + '] 좌석 예약 관리 비밀번호 찾기 확인 번호', [
       '좌석 예약 관리 화면의 비밀번호를 새로 정하려면 아래 확인 번호를 넣어 주세요.',
-      '아이디: ' + str((env.adminCred() || {}).id)]);
+      '아이디: ' + str((env.adminCred() || {}).id)], true);
     return bad || { ok: true, sentTo: to.split(',').map(maskEmail).join(', ') };
   }
   function adminReset(req, env) {
     var pw = str(req.password);
     if (pw.length < ADMIN_PW_MIN || pw.length > 60) return fail('invalid', '새 비밀번호는 ' + ADMIN_PW_MIN + '~60자로 정해 주세요.', { errors: { password: ADMIN_PW_MIN + '~60자로 정해 주세요' } });
     if (!env.cache.get('rsvcode:admin')) return codeFail();   // 받은 확인 번호가 없으면 잠금 없이 바로
-    var bad = null, c = null, nc = null;
-    env.lock(function () {   // 확인 번호 확인·소비와 새 비밀번호 저장을 한 번에
+    var bad = null, c = null, nc = null, used = null;
+    try { env.lock(function () {   // 확인 번호 확인·소비와 새 비밀번호 저장을 한 번에
       bad = checkCode(env, 'admin', req.code);
       if (bad) return;
       c = env.adminCred() || {};
       var salt = env.uuid().slice(0, 16);
       nc = { id: c.id || 'admin', salt: salt, hash: adminHash(env, salt, pw) };
       env.setAdminCred(nc);
-      codeUsed(env, 'admin');
-    });
+      used = codeUsed(env, 'admin');
+    }); } catch (e) { codeRestore(env, 'admin', used); return unsureReset(); }
     if (bad) return bad;
     env.cache.remove('rsvadmfail:' + env.sha256(str(nc.id).toLowerCase()).slice(0, 16));
     return { ok: true, token: adminToken(env, nc), id: nc.id };
@@ -816,24 +845,33 @@ var RSV = (function () {
      저장한 뒤(잠금 밖) 메일을 보내고 메일 기록을 따로 남김 → 메일이 늦거나 실패해도 상태 변경은 이미 저장됨.
      보내기 직전에 예약을 다시 읽어 상태가 when 과 다르면(그 사이 취소 등) 보내지 않고 그 사실만 기록 */
   function adminUpdate(req, env, fn) {
-    var id = str(req.id), out = null;
-    env.lock(function () {
+    var id = str(req.id), out = null, want = null;
+    try { env.lock(function () {
       var recs = readAll(env), x = recs.filter(function (r) { return r.id === id; })[0];
       if (!x) { out = fail('missing', '예약을 찾을 수 없어요. 새로고침해 주세요.'); return; }
       out = fn(x, recs);
       if (!out || !out.ok) return;
       if (out.same) { delete out.same; return; }
       var changed = x._stamp; delete x._stamp;
+      if (out.mail) jobStart(env, x, out.mail.label);   // 상태와 '보내는 중'을 한 번에 저장
+      want = fromRec(x);
       saveRecs(env, [x]);
       if (changed) out.stamp = stamp(env, x.id);
-    });
+    }); } catch (e) {
+      // 저장 마무리 실패: 다시 읽어 바꾼 내용이 그대로 저장됐으면 이어서(메일 포함), 아니면 실패로 알림
+      var back = null;
+      try { back = want && findRec(env, id); } catch (x) { back = null; }
+      if (!back || JSON.stringify(fromRec(back)) !== JSON.stringify(want)) return fail('unsure', '저장됐는지 확인하지 못했어요. 새로고침해서 상태를 확인한 뒤 다시 해 주세요.');
+      out.x = back;
+    }
     if (!out || !out.ok) return out;
     var x = out.x, mail = out.mail;
     delete out.x; delete out.mail;
     if (mail) {
       var cur = findRec(env, x.id), line;
-      var st0 = null; try { st0 = env.cache.get('rsvst:' + x.id); } catch (e) { st0 = out.stamp; }
-      if (!cur || cur.status !== mail.when || (out.stamp && st0 !== out.stamp)) { line = [env.now() + ' ' + mail.label + ' 안 보냄 (그 사이 예약 상태가 바뀜)', false]; out.mailed = false; out.mailSkipped = true; }
+      var st0 = null; try { st0 = env.cache.get('rsvst:' + x.id); } catch (e) { st0 = null; }
+      // 상태표가 남아 있고 다른 값이면(그 사이 다른 처리) 안 보냄. 상태표가 사라졌으면 상태만 보고 판단
+      if (!cur || cur.status !== mail.when || (out.stamp && st0 && st0 !== out.stamp)) { line = [env.now() + ' ' + mail.label + ' 안 보냄 (그 사이 예약 상태가 바뀜)', false]; out.mailed = false; out.mailSkipped = true; }
       else { var err = mail.send(cur); line = [env.now() + ' ' + mail.label, err]; out.mailed = !err; if (err) out.mailError = err; }
       var y = logOn(env, x.id, [line]);
       if (y) x = y; else out.logSaved = false;
@@ -882,42 +920,48 @@ var RSV = (function () {
   }
   /* 승인 대기 신청 여러 건을 한꺼번에 거절 (가짜 대량 신청 정리용). 승인 대기가 아닌 건은 건너뜀.
      안내 메일은 notify 가 true 일 때만 (가짜 주소로 메일 한도를 쓰지 않게 기본은 보내지 않음) */
+  /* 승인 대기 신청 한꺼번에 거절.
+     - 거절과 '거절 안내 메일 보내는 중'(알림 선택 시)을 같은 저장에 넣음 → 중간에 멈춰도 저장된 줄은 다시 하면 안내 메일을 이어서 보냄
+     - 메일은 보내기 직전에 다시 읽어 아직 '거절'일 때만 (그 사이 다시 승인된 예약에는 옛 거절 안내를 보내지 않음) */
   function decideMany(req, env) {
     var ids = (Array.isArray(req.ids) ? req.ids : []).map(str).filter(Boolean).slice(0, 300), reason = clean(req.reason, 300);
     if (str(req.decision) !== 'reject') return fail('decision', '알 수 없는 처리예요.');
     if (!ids.length) return fail('ids', '거절할 신청을 골라 주세요.');
-    var done = [], want = {};
+    var notify = req.notify === true, done = [], want = {}, label = '거절 안내 메일', partial = false;
     ids.forEach(function (id) { want[id] = true; });
-    env.lock(function () {
+    try { env.lock(function () {
       readAll(env).forEach(function (x) {
         if (!want[x.id] || x.status !== ST.WAIT) return;
         x.status = ST.NO; x.decidedAt = env.now();
         x.memo = clean((x.memo ? x.memo + '\n' : '') + env.now() + ' 한꺼번에 거절' + (reason ? ': ' + reason : ''), 500);
+        if (notify && x.email) jobStart(env, x, label);
         done.push(x);
       });
       saveRecs(env, done);
       done.forEach(function (x) { stamp(env, x.id); });
-    });
-    var mailed = 0, failed = 0;
-    if (req.notify === true) {
-      var logs = [];
-      done.forEach(function (x) {
-        if (!x.email) return;
-        var err = mailReject(env, x, reason);
-        if (err) failed++; else mailed++;
-        logs.push([x.id, [env.now() + ' 거절 안내 메일', err]]);
-      });
-      if (logs.length) {
-        try {
-          env.lock(function () {
-            var by = {}; readAll(env).forEach(function (x) { by[x.id] = x; });
-            var list = logs.map(function (l) { var x = by[l[0]]; if (x) logMail(x, l[1][0], l[1][1]); return x; }).filter(Boolean);
-            saveRecs(env, list, true);
-          });
-        } catch (e) { if (typeof console !== 'undefined') console.error('메일 기록 실패: ' + (e && e.message)); }
-      }
+    }); } catch (e) {
+      partial = true;   // 일부만 저장됐을 수 있음 → 아래에서 실제로 저장된 줄만 이어서 처리
+      if (typeof console !== 'undefined') console.error('한꺼번에 거절 중 저장 실패: ' + (e && e.message));
     }
-    return { ok: true, done: done.length, skipped: ids.length - done.length, mailed: mailed, mailFailed: failed };
+    // 메일 보낼 대상: 이번에 고른 신청 중 '거절'이고 안내 메일이 '보내는 중'인 줄 (이번 처리 + 앞서 중간에 멈춘 처리)
+    var mailed = 0, failed = 0, skipped = 0, now = {}, rejected = 0;
+    readAll(env).forEach(function (x) { if (want[x.id]) now[x.id] = x; });
+    ids.forEach(function (id) { var x = now[id]; if (x && x.status === ST.NO) rejected++; });
+    var logs = [];
+    ids.forEach(function (id) {
+      var x = now[id];
+      if (!x || !x.email || !jobPending(x, label)) return;
+      if (x.status !== ST.NO) { logs.push([id, [env.now() + ' ' + label + ' 안 보냄 (그 사이 예약 상태가 바뀜)', false]]); skipped++; return; }
+      var err = mailReject(env, x, reason);
+      if (err) failed++; else mailed++;
+      logs.push([id, [env.now() + ' ' + label, err]]);
+    });
+    var logSaved = true;
+    logs.forEach(function (l) { if (!logOn(env, l[0], [l[1]])) logSaved = false; });
+    var out = { ok: !partial, done: rejected, skipped: ids.length - rejected, mailed: mailed, mailFailed: failed, mailSkipped: skipped };
+    if (!logSaved) out.logSaved = false;
+    if (partial) { out.code = 'partial'; out.message = '한꺼번에 거절하다 중간에 멈췄어요. 거절된 ' + rejected + '건은 저장됐어요. 같은 신청을 골라 한 번 더 하면 남은 신청과 빠진 안내 메일을 이어서 처리해요.'; }
+    return out;
   }
   /* 메일 다시 보내기: 상태는 바꾸지 않고 보낸 결과만 기록 (실패도 기록) */
   function resend(req, env) {
@@ -1060,7 +1104,8 @@ var RSV = (function () {
       set.RSV_MAX2 = String(n);
     }
     if (req.openAt !== undefined) {
-      var at = str(req.openAt).replace('T', ' ').slice(0, 16);
+      var at = str(req.openAt).trim().replace('T', ' ');
+      if (at.length === 19 && /:00$/.test(at)) at = at.slice(0, 16);   // 초(:00)까지 온 값만 받아 줌, 그 밖에 뒤에 붙은 글자는 거절
       if (!realAt(at)) return fail('invalid', '예약 오픈 일시를 확인해 주세요. (예: 2026-11-04 10:00)');
       set.RSV_OPEN_AT = at;
     }

@@ -81,7 +81,7 @@
       var ctrl = "AbortController" in window ? new AbortController() : null;
       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, TIMEOUT);
       fetch(API, { method: "POST", body: JSON.stringify(data), signal: ctrl ? ctrl.signal : undefined })
-        .then(function (r) { return r.json(); })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })   // 서버 오류(HTTP 500 등)는 내용이 ok 여도 성공으로 보지 않음
         .then(function (res) {
           clearTimeout(timer);
           btn.disabled = false;
