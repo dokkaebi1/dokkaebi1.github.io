@@ -439,7 +439,7 @@ var RSV = (function () {
     var by = {};   // 종류별 마지막 줄이 '보내는 중'이면 그 시각
     str(x.mailLog).split('\n').forEach(function (l) {
       ['담당자 알림', '접수 메일', '확정 메일', '거절 안내 메일'].forEach(function (lb) {
-        if (l.indexOf(lb) >= 0) by[lb] = /보내는 중$/.test(l) ? l.slice(0, 16) : '';
+        if (l.indexOf(lb) >= 0) by[lb] = /(보내는 중|맡음 \w+)$/.test(l) ? l.slice(0, 16) : '';   // 맡은 뒤 결과가 없는 것도 확인 필요
       });
     });
     var at = '';
@@ -943,21 +943,31 @@ var RSV = (function () {
       partial = true;   // 일부만 저장됐을 수 있음 → 아래에서 실제로 저장된 줄만 이어서 처리
       if (typeof console !== 'undefined') console.error('한꺼번에 거절 중 저장 실패: ' + (e && e.message));
     }
-    // 메일 보낼 대상: 이번에 고른 신청 중 '거절'이고 안내 메일이 '보내는 중'인 줄 (이번 처리 + 앞서 중간에 멈춘 처리)
-    var mailed = 0, failed = 0, skipped = 0, now = {}, rejected = 0;
-    readAll(env).forEach(function (x) { if (want[x.id]) now[x.id] = x; });
-    ids.forEach(function (id) { var x = now[id]; if (x && x.status === ST.NO) rejected++; });
-    var logs = [];
+    // 메일 보낼 대상: 이번에 고른 신청 중 '거절'이고 안내 메일이 '보내는 중'인 줄 (이번 처리 + 앞서 중간에 멈춘 처리).
+    // 예약마다: ① 잠금 안에서 '맡음 표(실행 토큰)'를 기록에 남긴 실행만 보냄 (겹친 요청·재시도가 같은 메일을 또 보내지 않게)
+    //           ② 보내기 바로 전에 다시 읽어 아직 '거절'이고 맡음 표가 내 것일 때만 보냄 (그 사이 다시 승인되면 안 보냄)
+    var mailed = 0, failed = 0, skipped = 0, rejected = 0, logSaved = true;
+    readAll(env).forEach(function (x) { if (want[x.id] && x.status === ST.NO) rejected++; });
     ids.forEach(function (id) {
-      var x = now[id];
-      if (!x || !x.email || !jobPending(x, label)) return;
-      if (x.status !== ST.NO) { logs.push([id, [env.now() + ' ' + label + ' 안 보냄 (그 사이 예약 상태가 바뀜)', false]]); skipped++; return; }
-      var err = mailReject(env, x, reason);
-      if (err) failed++; else mailed++;
-      logs.push([id, [env.now() + ' ' + label, err]]);
+      var token = env.uuid().slice(0, 10), mark = label + ' 맡음 ' + token, mine = null;
+      try { env.lock(function () {
+        var x = findRec(env, id);
+        if (!x || !x.email || !jobPending(x, label)) return;
+        if (x.status !== ST.NO) { logMail(x, env.now() + ' ' + label + ' 안 보냄 (그 사이 예약 상태가 바뀜)', false); saveRecs(env, [x], true); skipped++; return; }
+        logMail(x, env.now() + ' ' + mark, false);
+        saveRecs(env, [x], true);
+        mine = x;
+      }); } catch (e) { mine = null; logSaved = false; }   // 맡음 표를 확실히 남기지 못했으면 보내지 않음 (기록에 '보내는 중'이 남아 관리 화면에 확인 필요)
+      if (!mine) return;
+      var cur = null;
+      try { cur = findRec(env, id); } catch (e) { cur = null; }
+      var log = cur ? str(cur.mailLog).split('\n') : [];
+      var stillMine = !!cur && cur.status === ST.NO && (log.filter(function (l) { return l.indexOf(label) >= 0; }).pop() || '').slice(-mark.length) === mark;
+      var line;
+      if (!stillMine) { line = [env.now() + ' ' + label + ' 안 보냄 (그 사이 예약 상태가 바뀜)', false]; skipped++; }
+      else { var err = mailReject(env, cur, reason); if (err) failed++; else mailed++; line = [env.now() + ' ' + label, err]; }
+      if (!logOn(env, id, [line])) logSaved = false;
     });
-    var logSaved = true;
-    logs.forEach(function (l) { if (!logOn(env, l[0], [l[1]])) logSaved = false; });
     var out = { ok: !partial, done: rejected, skipped: ids.length - rejected, mailed: mailed, mailFailed: failed, mailSkipped: skipped };
     if (!logSaved) out.logSaved = false;
     if (partial) { out.code = 'partial'; out.message = '한꺼번에 거절하다 중간에 멈췄어요. 거절된 ' + rejected + '건은 저장됐어요. 같은 신청을 골라 한 번 더 하면 남은 신청과 빠진 안내 메일을 이어서 처리해요.'; }
