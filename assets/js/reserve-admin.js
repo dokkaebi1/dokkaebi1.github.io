@@ -524,7 +524,7 @@
         call('rsvAdminDecideMany', { ids: ids, decision: 'reject', reason: v.value, notify: !!v.check }).then(function (r) {
           done();
           if (r.ok) S.sel = {};
-          afterAll(r, r.ok ? r.done + '건을 거절했어요. 좌석이 다시 열렸어요.' + (r.skipped ? ' (그 사이 처리된 ' + r.skipped + '건은 건너뜀)' : '') + (r.mailFailed ? ' 안내 메일 ' + r.mailFailed + '건은 보내지 못했어요.' : '') + (r.mailSkipped ? ' 그 사이 다시 승인된 ' + r.mailSkipped + '건에는 안내 메일을 보내지 않았어요.' : '') : '', t);
+          afterAll(r, r.ok ? r.done + '건을 거절했어요. 좌석이 다시 열렸어요.' + (r.skipped ? ' (그 사이 처리된 ' + r.skipped + '건은 건너뜀)' : '') + (r.mailFailed ? ' 안내 메일 ' + r.mailFailed + '건은 보내지 못했어요.' : '') + (r.mailSkipped ? ' 그 사이 다시 승인된 ' + r.mailSkipped + '건에는 안내 메일을 보내지 않았어요.' : '') + (r.mailUnknown ? ' 안내 메일 ' + r.mailUnknown + '건은 확인하지 못해 아직 보내지 않았어요. 같은 신청을 골라 한 번 더 하면 이어서 보내요.' : '') : '', t);
         }).catch(function () { done(); t.disabled = false; });
       });
       return;

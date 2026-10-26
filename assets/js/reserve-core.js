@@ -946,7 +946,7 @@ var RSV = (function () {
     // 메일 보낼 대상: 이번에 고른 신청 중 '거절'이고 안내 메일이 '보내는 중'인 줄 (이번 처리 + 앞서 중간에 멈춘 처리).
     // 예약마다: ① 잠금 안에서 '맡음 표(실행 토큰)'를 기록에 남긴 실행만 보냄 (겹친 요청·재시도가 같은 메일을 또 보내지 않게)
     //           ② 보내기 바로 전에 다시 읽어 아직 '거절'이고 맡음 표가 내 것일 때만 보냄 (그 사이 다시 승인되면 안 보냄)
-    var mailed = 0, failed = 0, skipped = 0, rejected = 0, logSaved = true;
+    var mailed = 0, failed = 0, skipped = 0, rejected = 0, unknown = 0, logSaved = true;
     readAll(env).forEach(function (x) { if (want[x.id] && x.status === ST.NO) rejected++; });
     ids.forEach(function (id) {
       var token = env.uuid().slice(0, 10), mark = label + ' 맡음 ' + token, mine = null;
@@ -960,7 +960,17 @@ var RSV = (function () {
       }); } catch (e) { mine = null; logSaved = false; }   // 맡음 표를 확실히 남기지 못했으면 보내지 않음 (기록에 '보내는 중'이 남아 관리 화면에 확인 필요)
       if (!mine) return;
       var cur = null;
-      try { cur = findRec(env, id); } catch (e) { cur = null; }
+      try { cur = findRec(env, id); }
+      catch (e) {
+        // 다시 읽기가 실패한 것은 '상태가 바뀐 것'이 아님 → 결과 줄을 붙이지 않고, 맡음 표를 '보내는 중'으로 되돌려
+        // 다음 한꺼번에 거절이 이어받게 함. 되돌리기도 실패하면 '맡음'이 남아 관리 화면에 '메일 확인 필요'로 보임
+        unknown++;
+        try { env.lock(function () {
+          var y = findRec(env, id), last = y ? (str(y.mailLog).split('\n').filter(function (l) { return l.indexOf(label) >= 0; }).pop() || '') : '';
+          if (y && last.slice(-mark.length) === mark) { jobStart(env, y, label); saveRecs(env, [y], true); }
+        }); } catch (x) { logSaved = false; }
+        return;
+      }
       var log = cur ? str(cur.mailLog).split('\n') : [];
       var stillMine = !!cur && cur.status === ST.NO && (log.filter(function (l) { return l.indexOf(label) >= 0; }).pop() || '').slice(-mark.length) === mark;
       var line;
@@ -969,6 +979,7 @@ var RSV = (function () {
       if (!logOn(env, id, [line])) logSaved = false;
     });
     var out = { ok: !partial, done: rejected, skipped: ids.length - rejected, mailed: mailed, mailFailed: failed, mailSkipped: skipped };
+    if (unknown) out.mailUnknown = unknown;   // 확인하지 못해 보내지 않은 안내 (같은 신청으로 다시 하면 이어서)
     if (!logSaved) out.logSaved = false;
     if (partial) { out.code = 'partial'; out.message = '한꺼번에 거절하다 중간에 멈췄어요. 거절된 ' + rejected + '건은 저장됐어요. 같은 신청을 골라 한 번 더 하면 남은 신청과 빠진 안내 메일을 이어서 처리해요.'; }
     return out;
