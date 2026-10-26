@@ -180,7 +180,8 @@
     if (x.note) dl.push(['요청사항', esc(x.note)]);
     dl.push(['신청', esc(x.createdAt) + (x.decidedAt ? ' · 처리 ' + esc(x.decidedAt) : '')]);
     if (x.arrivedAt) dl.push(['도착', '<b style="color:var(--arr)">' + esc(x.arrivedAt) + '</b>' + (x.testArrival ? ' · 시험 도착 (시험 모드가 꺼지면 저절로 지워져요)' : '')]);
-    if (stuck(x)) dl.push(['메일 확인 필요', '<b style="color:var(--red,#B21A2D)">‘보내는 중’에서 멈춘 메일이 있어요.</b> 보냈는지 알 수 없어서 저절로 다시 보내지 않아요. 예약자에게 확인하거나 ‘다시 보내기’를 눌러 주세요.']);
+    if (stuck(x)) dl.push(['메일 확인 필요', '<b style="color:var(--red,#B21A2D)">‘보내는 중’에서 멈춘 메일이 있어요.</b> 보냈는지 알 수 없어서 저절로 다시 보내지 않아요. '
+      + (x.status === R.ST.WAIT || x.status === R.ST.OK ? '예약자에게 확인하거나 아래 ‘다시 보내기’를 눌러 주세요.' : '필요하면 예약자에게 직접 연락해 주세요.')]);
     if (x.mailLog) dl.push(['메일', esc(x.mailLog).replace(/\n/g, '<br>')]);
     var flags = '', sim = (S.sim || {})[x.id];
     if (sim) flags += '<span class="ad-flag warn" title="같은 회차에 이름·기관·요청사항이 같은 신청이 있어요. 가짜 신청인지 확인해 주세요.">비슷한 신청 ' + sim + '건</span>';
@@ -523,8 +524,9 @@
         var done = function () { S.bulkBusy = false; var b = U.$('[data-bulk-reject]'); if (b) b.disabled = !Object.keys(S.sel).length; };
         call('rsvAdminDecideMany', { ids: ids, decision: 'reject', reason: v.value, notify: !!v.check }).then(function (r) {
           done();
+          if (r.code === 'partial') r.message = '한꺼번에 거절하다 중간에 멈췄어요. 거절된 ' + r.done + '건은 저장됐어요. 아직 ‘승인 대기’로 남은 신청은 다시 골라 거절해 주세요. 이미 거절된 건 중 ‘메일 확인 필요’가 보이면 예약자에게 직접 연락해 주세요.';
           if (r.ok) S.sel = {};
-          afterAll(r, r.ok ? r.done + '건을 거절했어요. 좌석이 다시 열렸어요.' + (r.skipped ? ' (그 사이 처리된 ' + r.skipped + '건은 건너뜀)' : '') + (r.mailFailed ? ' 안내 메일 ' + r.mailFailed + '건은 보내지 못했어요.' : '') + (r.mailSkipped ? ' 그 사이 다시 승인된 ' + r.mailSkipped + '건에는 안내 메일을 보내지 않았어요.' : '') + (r.mailUnknown ? ' 안내 메일 ' + r.mailUnknown + '건은 확인하지 못해 아직 보내지 않았어요. 같은 신청을 골라 한 번 더 하면 이어서 보내요.' : '') : '', t);
+          afterAll(r, r.ok ? r.done + '건을 거절했어요. 좌석이 다시 열렸어요.' + (r.skipped ? ' (그 사이 처리된 ' + r.skipped + '건은 건너뜀)' : '') + (r.mailFailed ? ' 안내 메일 ' + r.mailFailed + '건은 보내지 못했어요.' : '') + (r.mailSkipped ? ' 그 사이 다시 승인된 ' + r.mailSkipped + '건에는 안내 메일을 보내지 않았어요.' : '') + (r.mailUnknown ? ' 거절 안내 메일 ' + r.mailUnknown + '건은 보냈는지 확인하지 못했어요. 그 예약에 ‘메일 확인 필요’가 보이면 예약자에게 직접 연락해 주세요.' : '') : '', t);
         }).catch(function () { done(); t.disabled = false; });
       });
       return;
