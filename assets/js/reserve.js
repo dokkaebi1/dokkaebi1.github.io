@@ -245,6 +245,18 @@
     if (f.password.value.length < 4 || f.password.value.length > 30) errs.password = '비밀번호는 4~30자로 정해 주세요';
     if (!f.consent.checked) errs.consent = '개인정보 수집·이용에 동의해 주세요';
     if (Object.keys(errs).length) { U.fieldErrors(form, errs); U.$('.rv-err', dlg).textContent = '입력한 내용을 확인해 주세요.'; return; }
+    // 기관·단체 이름으로 1명만 신청하면 한 번 더 확인 (인원 칸 기본값 1 그대로 보내는 실수 방지 · 정말 1명이면 그대로 신청)
+    if (S.need === 1 && f.org.value.trim() && !S.oneOk) {
+      U.confirm('좌석 1석만 신청할까요?', f.org.value.trim() + ' 이름으로 1명(좌석 1석)만 신청돼요.\n요청사항에 인원을 적어도 좌석 수는 늘어나지 않아요. 단체라면 ‘닫기’를 누른 뒤 선생님을 포함한 인원을 정해 주세요.', '네, 1명이에요').then(function (yes) {
+        if (yes) { S.oneOk = true; form.dispatchEvent(new Event('submit', { cancelable: true })); return; }
+        dlg.close();   // 적은 내용은 그대로 두고 인원 칸으로 돌아감
+        nInput.scrollIntoView({ block: 'center' });
+        nInput.focus();
+        nInput.select();
+      });
+      return;
+    }
+    S.oneOk = false;
     var btn = U.$('[type=submit]', form), err = U.$('.rv-err', dlg);
     function idle() { S.busy = false; btn.disabled = false; btn.textContent = '예약 신청하기'; }
     S.busy = true; btn.disabled = true; btn.textContent = '보내는 중...';
