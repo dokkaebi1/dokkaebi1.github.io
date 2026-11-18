@@ -510,3 +510,16 @@ dialog.form-dialog .dlg-close:hover, dialog.form-dialog .dlg-close:focus-visible
 /* 2026-10-26 점검 반영: 입력 오류 표시, 전화번호 줄바꿈 방지 */
 .form [aria-invalid="true"], form.js-form [aria-invalid="true"] { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(194, 28, 49, .18); }
 a[href^="tel:"] { white-space: nowrap; }
+
+/* 자주 묻는 질문 · 바닥글 초청 안내 링크 (2026-11-18 검색 노출 보강) */
+.faq { display: grid; gap: 12px; max-width: 880px; }
+.faq__item { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+.faq__item summary { cursor: pointer; list-style: none; position: relative; padding: 18px 56px 18px 22px; font-size: 18px; font-weight: 800; line-height: 1.5; color: var(--ink); }
+.faq__item summary::-webkit-details-marker { display: none; }
+.faq__item summary::after { content: "+"; position: absolute; right: 22px; top: 50%; transform: translateY(-50%); font-size: 26px; font-weight: 700; line-height: 1; color: var(--red-d); }
+.faq__item[open] summary::after { content: "−"; }
+.faq__item summary:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; border-radius: 12px; }
+.faq__item p { margin: 0; padding: 0 22px 20px; font-size: 16px; line-height: 1.75; color: var(--text-soft); }
+.footer-links { order: 9; flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px 16px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, .08); }
+.footer-links a { text-decoration: none; }
+.footer-links a:hover { color: var(--on-ink); text-decoration: underline; }
