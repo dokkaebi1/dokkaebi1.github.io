@@ -722,3 +722,96 @@ a[href^="tel:"] { white-space: nowrap; }
   .pd-syn { line-height: 30px; background: #fff repeating-linear-gradient(180deg, transparent 0 29px, rgba(31, 59, 96, .12) 29px 30px); }
   .pd-syn p { margin-bottom: 30px; }
 }
+
+/* ── 첫 화면 슬라이드 (2026-11-25): 1 극단 소개 · 2 어린이 초청공연 포스터 ───────── */
+.hero--slides { display: block; min-height: 0; }
+.hero--slides::after { content: none; }
+.hero__track { position: relative; }
+.hero__slide { position: relative; min-height: max(620px, 100svh); display: grid; align-items: end; isolation: isolate; overflow: hidden; }
+.hero__slide--intro::after {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(21, 17, 15, .8) 0%, rgba(21, 17, 15, .42) 36%, rgba(21, 17, 15, 0) 62%),
+    radial-gradient(120% 80% at 70% 30%, rgba(21, 17, 15, 0) 0%, rgba(21, 17, 15, .12) 62%, rgba(21, 17, 15, .6) 100%),
+    linear-gradient(180deg, rgba(21, 17, 15, .45) 0%, rgba(21, 17, 15, 0) 20%, rgba(21, 17, 15, .08) 58%, rgba(21, 17, 15, .9) 100%);
+}
+/* 스크립트가 돌면 두 장을 한자리에 겹쳐 두고 서로 바꿔 보여 줌(스크립트가 없으면 위아래로 차례로 보임) */
+.js .hero--slides.is-ready .hero__track { display: grid; }
+.js .hero--slides.is-ready .hero__slide { grid-area: 1 / 1; opacity: 0; visibility: hidden; transition: opacity .8s var(--ease), visibility 0s linear .8s; }
+.js .hero--slides.is-ready .hero__slide.is-on { opacity: 1; visibility: visible; transition: opacity .8s var(--ease), visibility 0s; }
+
+.hero--slides .hero__inner { padding-bottom: clamp(100px, 14vh, 150px); }
+
+/* 2번: 초청공연 포스터 */
+.hero__slide--shows { background:
+    radial-gradient(70% 60% at 78% 38%, rgba(194, 28, 49, .32), rgba(21, 17, 15, 0) 70%),
+    radial-gradient(50% 50% at 12% 90%, rgba(232, 176, 74, .12), rgba(21, 17, 15, 0) 70%),
+    var(--ink); }
+.hero__shows { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); grid-template-areas: "text posters" "acts posters";
+  column-gap: clamp(32px, 5vw, 80px); row-gap: 0; align-content: center; align-self: center; padding: 120px 0 130px; }
+.hero__shows-text { grid-area: text; align-self: end; }
+.hero__shows > .hero__actions { grid-area: acts; align-self: start; }
+.hero__title { font-family: var(--display); font-weight: 900; font-size: clamp(34px, 4.4vw, 62px); line-height: 1.14; letter-spacing: -.03em; margin: 16px 0 20px; color: #fff; }
+.hero__shows .hero__lead { margin-bottom: 30px; max-width: 24em; }
+.hero__posters { grid-area: posters; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(12px, 1.8vw, 24px); align-items: end; }
+.hero__posters a { display: block; color: var(--on-ink); text-decoration: none; border-radius: 10px; }
+.hero__posters a:focus-visible { outline: 3px solid var(--gold); outline-offset: 6px; }
+.hero__posters img { display: block; width: 100%; height: auto; border-radius: 8px; box-shadow: 0 26px 50px -18px rgba(0, 0, 0, .9), 0 0 0 1px rgba(255, 255, 255, .08); transition: transform .4s var(--ease); }
+.hero__posters li:nth-child(1) img { transform: rotate(-3deg) translateY(12px); }
+.hero__posters li:nth-child(2) img { transform: translateY(-16px); }
+.hero__posters li:nth-child(3) img { transform: rotate(3deg) translateY(12px); }
+.hero__posters a:hover img, .hero__posters a:focus-visible img { transform: translateY(-26px); }
+.hero__posters span { display: block; margin-top: 22px; text-align: center; font-size: 13px; color: var(--on-ink-soft); }
+.hero__posters b { display: block; margin-top: 2px; font-size: clamp(14px, 1.3vw, 17px); color: #fff; }
+
+/* 넘김 단추: 01 극단 도깨비 · 02 초청공연 (가는 막대가 다음 장까지 남은 시간) */
+.hero__nav { position: absolute; left: 0; right: 0; bottom: 22px; z-index: 3; }
+.hero__nav .wrap { display: flex; align-items: center; gap: 18px; }
+.hero__dot { appearance: none; background: none; border: 0; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; color: var(--on-ink-soft); padding: 8px 0; min-width: 132px; text-align: left; display: block; }
+.hero__dot span { font-family: var(--display); color: inherit; margin-right: 4px; }
+.hero__dot i { display: block; margin-top: 8px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .22); overflow: hidden; }
+.hero__dot i::before { content: ""; display: block; height: 100%; width: 100%; background: var(--gold); transform: scaleX(0); transform-origin: left; }
+.hero__dot[aria-current="true"] { color: #fff; }
+.hero__dot[aria-current="true"] i::before { animation: heroBar 7s linear forwards; }
+.hero.is-paused .hero__dot[aria-current="true"] i::before { animation-play-state: paused; }
+@keyframes heroBar { to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .hero__dot[aria-current="true"] i::before { animation: none; transform: scaleX(1); } }
+.hero__dot:focus-visible, .hero__play:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; border-radius: 4px; }
+.hero__play { appearance: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: var(--on-ink); background: rgba(21, 17, 15, .55); border: 1px solid rgba(255, 255, 255, .28); border-radius: 999px; padding: 7px 14px; margin-left: 4px; }
+.hero__play:hover { background: rgba(21, 17, 15, .85); }
+
+@media (max-width: 1023px) {
+  .hero__shows { grid-template-columns: 1fr; grid-template-areas: "text" "posters" "acts"; row-gap: 28px; padding: 120px 0 110px; }
+  .hero__shows-text { align-self: auto; }
+  .hero__shows .hero__lead { margin-bottom: 0; }
+  .hero__posters { max-width: 620px; }
+}
+
+/* 휴대폰: 사진은 위에 또렷하게, 글은 그 아래 어두운 바탕에 (글이 사진을 덮지 않게) */
+@media (max-width: 640px) {
+  .hero__slide { min-height: 0; }
+  .hero__slide--intro { display: block; }
+  .hero__slide--intro::after { content: none; }
+  .hero__slide--intro .hero__media { position: relative; inset: auto; height: 50svh; min-height: 320px; max-height: 460px; }
+  .hero__slide--intro .hero__media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(21, 17, 15, .7) 0, rgba(21, 17, 15, 0) 34%, rgba(21, 17, 15, 0) 62%, var(--ink) 100%); }
+  .hero__slide--intro .hero__inner { position: relative; padding: 0 0 36px; margin-top: -64px; }
+  .hero__slide--intro .hero__logo { margin: 10px 0 14px; }
+  .hero__slide--intro .hero__logo img { width: 200px; }
+  .hero__lead { font-size: 16px; line-height: 1.65; margin-bottom: 22px; }
+  .hero__slide--intro .hero__kids { display: none; }
+  .hero__actions .btn { flex: 1 1 auto; justify-content: center; }
+  .hero__actions .btn--red { flex-basis: 100%; }
+  .hero__shows { padding: 138px 0 36px; row-gap: 22px; }
+  .hero__title { font-size: 30px; margin: 12px 0 14px; }
+  .hero__posters { gap: 10px; }
+  .hero__posters li:nth-child(1) img { transform: rotate(-2deg) translateY(6px); }
+  .hero__posters li:nth-child(2) img { transform: translateY(-6px); }
+  .hero__posters li:nth-child(3) img { transform: rotate(2deg) translateY(6px); }
+  .hero__posters span { margin-top: 12px; font-size: 11.5px; line-height: 1.35; }
+  .hero__posters b { font-size: 13px; }
+  /* 넘김 단추는 머리글 바로 아래(아래쪽 전화 띠에 가리지 않게) */
+  .hero__nav { top: 80px; bottom: auto; }
+  .hero__nav .wrap { gap: 12px; }
+  .hero__dot { min-width: 0; flex: 1; font-size: 12.5px; padding: 6px 0; text-shadow: 0 1px 8px rgba(0, 0, 0, .8); }
+  .hero__play { padding: 6px 12px; font-size: 12.5px; }
+}

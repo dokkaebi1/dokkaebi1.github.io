@@ -72,22 +72,79 @@
   // 첫 화면 배경영상: 넓은 화면 + 데이터 절약 모드가 아닐 때만 불러오기
   var hv = document.querySelector(".hero__media video[data-src]");
   var saveData = navigator.connection && navigator.connection.saveData;
+  var hvOn = false;
+  function hvPlay() { if (!hvOn) return; var q = hv.play(); if (q && q.catch) q.catch(function () {}); }
   if (hv && !reduce && !saveData && window.matchMedia("(min-width: 700px)").matches) {
+    hvOn = true;
     hv.src = hv.getAttribute("data-src");
     hv.addEventListener("playing", function () { hv.classList.add("is-playing"); });
-    var p = hv.play();
-    if (p && p.catch) p.catch(function () {});
-    // 움직이는 배경을 멈출 수 있는 버튼
-    var pb = document.querySelector(".hero__pause");
-    if (pb) {
-      pb.hidden = false;
-      pb.addEventListener("click", function () {
-        var paused = pb.getAttribute("aria-pressed") === "true";
-        if (paused) { var q = hv.play(); if (q && q.catch) q.catch(function () {}); } else { hv.pause(); }
-        pb.setAttribute("aria-pressed", paused ? "false" : "true");
-        pb.textContent = paused ? "배경 영상 멈춤" : "배경 영상 재생";
+    hvPlay();
+  }
+
+  // 첫 화면 슬라이드: 1 극단 소개 → 2 초청공연 포스터. 7초마다 넘어가고, 포스터·넘김 단추에 마우스를 올리거나 키보드 초점이 배너 안에 있으면 잠시 멈춤.
+  // '멈춤' 버튼은 자동 넘김과 배경 영상을 함께 멈춤. 움직임 줄이기 설정이면 처음부터 멈춘 상태.
+  var hero = document.querySelector(".hero--slides");
+  if (hero) {
+    var slides = hero.querySelectorAll(".hero__slide"), dots = hero.querySelectorAll(".hero__dot");
+    var playBtn = hero.querySelector(".hero__play"), nav = hero.querySelector(".hero__nav");
+    var WAIT = 7000, cur = 0, timer = null, left = WAIT, startedAt = 0;
+    var userPaused = reduce, hover = false, focus = false;
+    nav.hidden = false;
+    hero.classList.add("is-ready");
+    function show(i) {
+      cur = (i + slides.length) % slides.length;
+      slides.forEach(function (s, k) {
+        var on = k === cur;
+        s.classList.toggle("is-on", on);
+        s.setAttribute("aria-hidden", on ? "false" : "true");
+        if ("inert" in s) s.inert = !on;
       });
+      dots.forEach(function (d, k) { d.setAttribute("aria-current", k === cur ? "true" : "false"); });
+      if (hvOn) { if (cur === 0 && !userPaused) hvPlay(); else hv.pause(); }
+      left = WAIT; run();
     }
+    function stopTimer() {
+      if (timer) { clearTimeout(timer); timer = null; left = Math.max(0, left - (Date.now() - startedAt)); }
+    }
+    function run() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      var paused = userPaused || hover || focus || document.hidden;
+      hero.classList.toggle("is-paused", paused);
+      if (paused) return;
+      startedAt = Date.now();
+      timer = setTimeout(function () { timer = null; show(cur + 1); }, left);
+    }
+    function hold(kind, on) {
+      if (kind === "hover") { if (hover === on) return; hover = on; } else { if (focus === on) return; focus = on; }
+      stopTimer(); run();
+    }
+    function setPaused(p) {
+      userPaused = p; stopTimer();
+      playBtn.setAttribute("aria-pressed", p ? "true" : "false");
+      playBtn.textContent = p ? "재생" : "멈춤";
+      if (hvOn) { if (!p && cur === 0) hvPlay(); else hv.pause(); }
+      run();
+    }
+    dots.forEach(function (d) { d.addEventListener("click", function () { show(+d.getAttribute("data-slide")); }); });
+    playBtn.addEventListener("click", function () { setPaused(!userPaused); });
+    // 첫 화면 전체가 배너라 배너 위 마우스로는 멈추지 않고, 포스터·넘김 단추 위에 있을 때만 잠시 멈춤
+    hero.querySelectorAll(".hero__posters, .hero__nav").forEach(function (el) {
+      el.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") hold("hover", true); });
+      el.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") hold("hover", false); });
+    });
+    hero.addEventListener("focusin", function () { hold("focus", true); });
+    hero.addEventListener("focusout", function (e) { if (!hero.contains(e.relatedTarget)) hold("focus", false); });
+    document.addEventListener("visibilitychange", function () { stopTimer(); run(); });
+    // 휴대폰: 옆으로 밀어서 넘기기
+    var tx = null, ty = 0;
+    hero.addEventListener("touchstart", function (e) { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+    hero.addEventListener("touchend", function (e) {
+      if (tx === null) return;
+      var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty; tx = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) show(cur + (dx < 0 ? 1 : -1));
+    }, { passive: true });
+    if (userPaused) setPaused(true);
+    show(0);
   }
 
   // 스크롤 등장 효과
