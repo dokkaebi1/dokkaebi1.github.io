@@ -182,4 +182,23 @@
       if (Math.abs(dx) > 50) show(idx + (dx < 0 ? 1 : -1));
     });
   }
+  // 공연 상세 페이지 탭 메뉴: 지금 보고 있는 부분의 탭에 표시 (탭 줄이 좁으면 그 탭이 보이게 옆으로 넘김)
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll(".pd-tabs a[href^='#']"));
+    if (!tabs.length) return;
+    var secs = tabs.map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); });
+    var cur = -1, ticking = false;
+    function pick() {
+      ticking = false;
+      var line = 150, i = -1;
+      secs.forEach(function (el, k) { if (el && el.getBoundingClientRect().top <= line) i = k; });
+      if (i === cur) return;
+      cur = i;
+      tabs.forEach(function (a, k) { a.classList.toggle("is-on", k === i); if (k === i) a.setAttribute("aria-current", "location"); else a.removeAttribute("aria-current"); });
+      var on = tabs[i], ul = on && on.closest("ul");
+      if (ul && ul.scrollWidth > ul.clientWidth) ul.scrollTo({ left: on.offsetLeft - 16, behavior: reduce ? "auto" : "smooth" });
+    }
+    window.addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(pick); } }, { passive: true });
+    pick();
+  })();
 })();

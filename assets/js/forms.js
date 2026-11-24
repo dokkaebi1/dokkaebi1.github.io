@@ -129,6 +129,25 @@
     }
     return cache[from];
   }
+  // 함께 공연하는 아동극단 징검다리의 공개 일정: '공연'이 잡힌 날짜만 씀(기관·장소는 쓰지 않음). 그날은 '공연'으로 보이고 접수를 받지 않음.
+  // 불러오지 못하면(느리거나 실패) 도깨비 일정만으로 그리고, 다음에 달을 넘길 때 다시 시도
+  var sharedMeta = document.querySelector('meta[name="dokkaebi-shared-schedule"]');
+  var SHARED = sharedMeta ? sharedMeta.getAttribute("content") : "", shared = null;
+  function loadShared() {
+    if (!SHARED) return Promise.resolve({});
+    if (!shared) {
+      var req = fetch(SHARED + (SHARED.indexOf("?") < 0 ? "?" : "&") + "action=public")
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          var o = {};
+          ((j && j.events) || []).forEach(function (e) { if (e && e.kind === "공연" && /^\d{4}-\d{2}-\d{2}$/.test(e.date)) o[e.date] = 1; });
+          return o;
+        });
+      var late = new Promise(function (_, no) { setTimeout(function () { no(new Error("timeout")); }, 10000); });
+      shared = Promise.race([req, late]).catch(function () { shared = null; return {}; });
+    }
+    return shared;
+  }
   document.addEventListener("dokkaebi:submitted", function () { cache = {}; document.querySelectorAll(".cal").forEach(function (c) { c._render && c._render(); }); });
 
   document.querySelectorAll(".cal").forEach(function (cal) {
@@ -149,9 +168,10 @@
       grid.setAttribute("aria-busy", "true");
       var note = cal.querySelector(".cal__note");
       if (!API) { note.textContent = "온라인 접수를 준비하고 있습니다. 일정은 전화로 문의해 주세요."; }
-      loadMonths(from).then(function (res) {
+      Promise.all([loadMonths(from), loadShared()]).then(function (both) {
         if (my !== gen) return;   // 그사이 다른 달로 넘어갔으면 버림
         grid.removeAttribute("aria-busy");
+        var res = both[0], shows = both[1] || {};
         var dates = (res && res.dates) || {};
         var today = new Date(); today.setHours(0, 0, 0, 0);
         var first = new Date(y, mo, 1), days = new Date(y, mo + 1, 0).getDate();
@@ -160,7 +180,8 @@
         for (var d = 1; d <= days; d++) {
           var day = new Date(y, mo, d), key = ymd(day), wd = day.getDay();
           var state = dates[key], cls = "cal__day", txt = "", btn = false;
-          if (day <= today) { cls += " is-past"; }
+          if (shows[key]) { cls += " is-show" + (day < today ? " is-past" : ""); txt = "공연"; }
+          else if (day <= today) { cls += " is-past"; }
           else if (wd === 0 || wd === 6) { cls += " is-weekend"; txt = "전화 문의"; }
           else if (state === "busy") { cls += " is-busy"; txt = "예약 완료"; }
           else if (state === "pending") { cls += " is-pending"; txt = "협의 중"; }
@@ -201,6 +222,12 @@
         near.disconnect(); render();
       }, { rootMargin: "600px 0px" });
       near.observe(cal);
+      // 징검다리 일정은 응답이 느려(몇 초) 달력보다 먼저, 더 멀리서부터 불러 둠
+      var early = new IntersectionObserver(function (es) {
+        if (!es.some(function (e) { return e.isIntersecting; })) return;
+        early.disconnect(); loadShared();
+      }, { rootMargin: "2400px 0px" });
+      early.observe(cal);
     } else render();
   });
 
