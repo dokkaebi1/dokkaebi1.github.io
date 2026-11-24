@@ -523,3 +523,32 @@ a[href^="tel:"] { white-space: nowrap; }
 .footer-links { order: 9; flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px 16px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, .08); }
 .footer-links a { text-decoration: none; }
 .footer-links a:hover { color: var(--on-ink); text-decoration: underline; }
+
+/* ── 2026-11-24 어린이 · 학교 공연(과학·수학·한글 연극) 상세 페이지 · 전화·문자 바로 문의 ── */
+.hero__kids { margin: -18px 0 28px; max-width: 34em; font-size: clamp(15px, 1.7vw, 18px); line-height: 1.7; color: #f3e9da; text-shadow: 0 2px 14px rgba(0, 0, 0, .8); }
+.hero__kids a { color: #fff; font-weight: 800; text-underline-offset: 3px; }
+.hero__actions .btn svg, .show-hero__actions .btn svg, .contact__links .btn svg, .kids-call .btn svg { width: 18px; height: 18px; fill: currentColor; margin-right: 8px; vertical-align: -3px; }
+.offers--shows { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.offers--shows .offer__img { aspect-ratio: 16 / 9; }
+.kids-call { margin-top: clamp(28px, 4vw, 44px); padding: 22px 24px; border-radius: var(--radius); background: var(--paper); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; border-left: 4px solid var(--jjok); }
+.kids-call p { margin: 0; font-size: 16.5px; line-height: 1.7; color: var(--text-soft); max-width: 36em; }
+.kids-call b { color: var(--ink); }
+.kids-call .btn--line { color: var(--ink); }
+.show-hero--show .facts { margin-bottom: 28px; }
+.show-hero--show .show-hero__tagline { max-width: 34em; }
+.show-hero__actions .btn { min-height: 48px; }
+.prose__title { font-family: var(--display); font-weight: var(--display-w); letter-spacing: -.02em; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.25; margin: 0 0 20px; color: var(--ink); }
+.apply-steps { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 10px; counter-reset: ap; }
+.apply-steps li { counter-increment: ap; }
+.apply-steps li b::before { content: counter(ap) ". "; }
+.show-body .prose .note { font-size: 16px; color: var(--text-soft); border-left: 3px solid var(--jjok); padding-left: 14px; }
+.callbar { display: none; }
+@media (max-width: 640px) {
+  .callbar { display: grid; grid-template-columns: 1fr 1fr 1.2fr; position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; background: var(--ink); border-top: 2px solid var(--red); padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -10px 30px -12px rgba(0, 0, 0, .6); }
+  .callbar a { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 54px; color: #fff; text-decoration: none; font-weight: 800; font-size: 16px; }
+  .callbar a + a { border-left: 1px solid rgba(255, 255, 255, .14); }
+  .callbar a:first-child { background: var(--red-btn); }
+  .callbar svg { width: 18px; height: 18px; fill: currentColor; }
+  .fab { display: none; }
+  body:has(.callbar) { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+}

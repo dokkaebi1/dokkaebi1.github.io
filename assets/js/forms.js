@@ -73,6 +73,13 @@
       new FormData(form).forEach(function (v, k) { data[k] = typeof v === "string" ? v.trim() : v; });
       var problem = check(form);
       if (problem) { say(form, problem + ".", false); return; }
+      // 공연 상세 페이지(shows/)에서 보낸 접수: 공연 이름을 내용 맨 앞에 붙여 알림 메일·시트에서 바로 보이게 (서버는 그대로)
+      var showEl = form.closest("[data-show]") || document.querySelector("main[data-show]");
+      var show = showEl ? showEl.getAttribute("data-show") : "";
+      if (show) {
+        var tag = form.hasAttribute("data-show") || data.type === "booking" ? "[희망 공연] " : "[보던 공연 페이지] ";
+        data.message = (tag + show + (data.message ? "\n" + data.message : "")).slice(0, LIMIT.message);
+      }
       data.consent = !!(form.querySelector('[name="consent"]') || {}).checked;
       if (!data.consent) { say(form, "개인정보 수집·이용에 동의해 주세요.", false); var c = field(form, "consent"); if (c) c.focus(); return; }
       data.reqId = reqIdFor(form, data);
