@@ -72,16 +72,20 @@
   // 첫 화면 배경영상: 넓은 화면 + 데이터 절약 모드가 아닐 때만 불러오기
   var hv = document.querySelector(".hero__media video[data-src]");
   var saveData = navigator.connection && navigator.connection.saveData;
-  var hvOn = false;
-  function hvPlay() { if (!hvOn) return; var q = hv.play(); if (q && q.catch) q.catch(function () {}); }
-  if (hv && !reduce && !saveData && window.matchMedia("(min-width: 700px)").matches) {
-    hvOn = true;
-    hv.src = hv.getAttribute("data-src");
-    hv.addEventListener("playing", function () { hv.classList.add("is-playing"); });
-    hvPlay();
+  var hvOk = !!hv && !reduce && !saveData && window.matchMedia("(min-width: 700px)").matches, hvOn = false;
+  function hvPlay() {   // 극단 소개 슬라이드가 처음 보일 때 영상을 불러옴
+    if (!hvOk) return;
+    if (!hvOn) {
+      hvOn = true;
+      hv.addEventListener("playing", function () { hv.classList.add("is-playing"); });
+      hv.src = hv.getAttribute("data-src");
+    }
+    var q = hv.play(); if (q && q.catch) q.catch(function () {});
   }
+  function hvPause() { if (hvOn) hv.pause(); }
+  if (hvOk && !document.querySelector(".hero--slides")) hvPlay();
 
-  // 첫 화면 슬라이드: 1 극단 소개 → 2 초청공연 포스터. 7초마다 넘어가고, 포스터·넘김 단추에 마우스를 올리거나 키보드 초점이 배너 안에 있으면 잠시 멈춤.
+  // 첫 화면 슬라이드: 1 초청공연 포스터(먼저 보임) ↔ 2 극단 소개(배경 영상). 7초마다 넘어가고, 포스터·넘김 단추에 마우스를 올리거나 키보드 초점이 배너 안에 있으면 잠시 멈춤.
   // '멈춤' 버튼은 자동 넘김과 배경 영상을 함께 멈춤. 움직임 줄이기 설정이면 처음부터 멈춘 상태.
   var hero = document.querySelector(".hero--slides");
   if (hero) {
@@ -90,7 +94,7 @@
     var WAIT = 7000, cur = 0, timer = null, left = WAIT, startedAt = 0;
     var userPaused = reduce, hover = false, focus = false;
     nav.hidden = false;
-    hero.classList.add("is-ready");
+    hero.classList.add("is-ready", "no-anim");   // 처음 열 때는 서서히 바뀌지 않고 첫 슬라이드(초청공연)가 바로 보이게
     function show(i) {
       cur = (i + slides.length) % slides.length;
       slides.forEach(function (s, k) {
@@ -99,8 +103,8 @@
         s.setAttribute("aria-hidden", on ? "false" : "true");
         if ("inert" in s) s.inert = !on;
       });
-      dots.forEach(function (d, k) { d.setAttribute("aria-current", k === cur ? "true" : "false"); });
-      if (hvOn) { if (cur === 0 && !userPaused) hvPlay(); else hv.pause(); }
+      dots.forEach(function (d) { d.setAttribute("aria-current", +d.getAttribute("data-slide") === cur ? "true" : "false"); });
+      if (slides[cur].classList.contains("hero__slide--intro") && !userPaused) hvPlay(); else hvPause();
       left = WAIT; run();
     }
     function stopTimer() {
@@ -122,7 +126,7 @@
       userPaused = p; stopTimer();
       playBtn.setAttribute("aria-pressed", p ? "true" : "false");
       playBtn.textContent = p ? "재생" : "멈춤";
-      if (hvOn) { if (!p && cur === 0) hvPlay(); else hv.pause(); }
+      if (!p && slides[cur].classList.contains("hero__slide--intro")) hvPlay(); else hvPause();
       run();
     }
     dots.forEach(function (d) { d.addEventListener("click", function () { show(+d.getAttribute("data-slide")); }); });
@@ -143,8 +147,12 @@
       var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty; tx = null;
       if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) show(cur + (dx < 0 ? 1 : -1));
     }, { passive: true });
+    var first = 0;
+    slides.forEach(function (s, k) { if (s.classList.contains("is-on")) first = k; });
+    cur = first;
     if (userPaused) setPaused(true);
-    show(0);
+    show(first);
+    requestAnimationFrame(function () { requestAnimationFrame(function () { hero.classList.remove("no-anim"); }); });
   }
 
   // 스크롤 등장 효과
