@@ -866,10 +866,12 @@ a.pd-pt__pic:hover img { transform: scale(1.04); }
     radial-gradient(120% 80% at 70% 30%, rgba(21, 17, 15, 0) 0%, rgba(21, 17, 15, .12) 62%, rgba(21, 17, 15, .6) 100%),
     linear-gradient(180deg, rgba(21, 17, 15, .45) 0%, rgba(21, 17, 15, 0) 20%, rgba(21, 17, 15, .08) 58%, rgba(21, 17, 15, .9) 100%);
 }
-/* 스크립트가 돌면 두 장을 한자리에 겹쳐 두고 서로 바꿔 보여 줌(스크립트가 없으면 위아래로 차례로 보임) */
-.js .hero--slides.is-ready .hero__track { display: grid; }
-.js .hero--slides.is-ready .hero__slide { grid-area: 1 / 1; opacity: 0; visibility: hidden; transition: opacity .8s var(--ease), visibility 0s linear .8s; }
-.js .hero--slides.is-ready .hero__slide.is-on { opacity: 1; visibility: visible; transition: opacity .8s var(--ease), visibility 0s; }
+/* 스크립트가 켜진 브라우저(.js)면 두 장을 한자리에 겹쳐 두고 서로 바꿔 보여 줌(스크립트가 없으면 위아래로 차례로 보임)
+   2026-11-26: 예전에는 main.js가 is-ready를 붙인 뒤에야 겹쳐서, 처음 그려질 때 위아래로 쌓였다가 포스터 장이 위로 튀어 올라 화면 밀림(CLS 0.95)이 생겼음.
+   .js 표시는 <head>에서 바로 붙으므로 처음 그릴 때부터 겹쳐 둠. */
+.js .hero--slides .hero__track { display: grid; }
+.js .hero--slides .hero__slide { grid-area: 1 / 1; opacity: 0; visibility: hidden; transition: opacity .8s var(--ease), visibility 0s linear .8s; }
+.js .hero--slides .hero__slide.is-on { opacity: 1; visibility: visible; transition: opacity .8s var(--ease), visibility 0s; }
 .js .hero--slides.no-anim .hero__slide { transition: none !important; }
 
 .hero--slides .hero__inner { padding-bottom: clamp(100px, 14vh, 150px); }
