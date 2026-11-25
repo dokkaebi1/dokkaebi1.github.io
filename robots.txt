@@ -4,4 +4,4 @@ Disallow: /admin.html
 
 Sitemap: https://doggaebee.kr/sitemap.xml
 
-#DaumWebMasterTool:f2435ee3059d461b1a817900ce81a0b1165855164410f86a6bf49a27ca4f33f4:pdYA2AN84tHnNET51D/IqQ==
+#DaumWebMasterTool:d1600c6f2705515b4d3b57c7b54ea45fd6b528521e3b0038897f26fc803b2b0a:pdYA2AN84tHnNET51D/IqQ==
